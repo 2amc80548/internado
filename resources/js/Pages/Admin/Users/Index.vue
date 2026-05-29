@@ -27,6 +27,7 @@ const studentForNotes = ref<any>(null);
 const selectedGestionIdForNotes = ref<number | string>('');
 const subiendoBoletinAdmin = ref(false);
 const subiendoBoletinPeriodo = ref<number | null>(null);
+const filterCursoWizard = ref('');
 
 // Filtros avanzados
 const filter = ref({
@@ -35,7 +36,9 @@ const filter = ref({
     comunidad_id: '',
     carrera_tecnica_id: '',
     curso_id: '',
-    estado_cuenta: ''
+    estado_cuenta: '',
+    sexo: '',
+    pabellon: ''
 });
 
 const selectedUsers = ref<number[]>([]);
@@ -172,6 +175,8 @@ const filteredUsers = computed(() => {
         let matchesComunidad = true;
         let matchesCurso = true;
         let matchesCarrera = true;
+        let matchesSexo = true;
+        let matchesPabellon = true;
 
         if (filter.value.comunidad_id) {
             matchesComunidad = user.rol?.nombre === 'Estudiante' && String(user.persona?.estudiante?.comunidad_id) === String(filter.value.comunidad_id);
@@ -187,9 +192,24 @@ const filteredUsers = computed(() => {
                 return bth?.carrera_tecnica_id && String(bth.carrera_tecnica_id) === String(filter.value.carrera_tecnica_id);
             });
         }
+        if (filter.value.sexo) {
+            matchesSexo = user.persona?.sexo === filter.value.sexo;
+        }
+        if (filter.value.pabellon) {
+            const latestReg = getLatestReg(user);
+            matchesPabellon = user.rol?.nombre === 'Estudiante' && latestReg && latestReg.pabellon === filter.value.pabellon;
+        }
 
-        return matchesText && matchesRole && matchesComunidad && matchesCurso && matchesCarrera && matchesEstado;
+        return matchesText && matchesRole && matchesComunidad && matchesCurso && matchesCarrera && matchesEstado && matchesSexo && matchesPabellon;
     });
+});
+
+const countHombres = computed(() => {
+    return filteredUsers.value.filter(u => u.persona?.sexo === 'M').length;
+});
+
+const countMujeres = computed(() => {
+    return filteredUsers.value.filter(u => u.persona?.sexo === 'F').length;
 });
 
 const openCreateModal = () => {
@@ -594,6 +614,7 @@ const promotionForm = useForm({
 });
 
 const openPromotionWizard = () => {
+    filterCursoWizard.value = '';
     let nextYear = new Date().getFullYear();
     const firstStudent = props.users.find(u => getLatestReg(u));
     
@@ -788,6 +809,9 @@ const aprobarMasivo = () => {
                                 <span class="px-2.5 py-0.5 rounded-full text-xs font-black bg-emerald-100 text-emerald-800 border border-emerald-200 animate-pulse tracking-wide uppercase">
                                     Gestión Activa: {{ activeGestionName }}
                                 </span>
+                                <span class="px-2.5 py-0.5 rounded-full text-xs font-black bg-slate-100 text-slate-800 border border-slate-200 uppercase tracking-wide">
+                                    Cantidad: {{ filteredUsers.length }}
+                                </span>
                             </div>
                             <p class="text-xs text-gray-500">Busca y filtra estudiantes de manera eficiente por sus atributos y estados</p>
                         </div>
@@ -812,7 +836,7 @@ const aprobarMasivo = () => {
                         </div>
                     </div>
                     
-                    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
                         <div class="lg:col-span-1">
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider">Buscar</label>
                             <div class="relative mt-1">
@@ -839,6 +863,26 @@ const aprobarMasivo = () => {
                             <select v-model="filter.rol_id" class="mt-1 block w-full border-gray-300 rounded-lg text-sm shadow-sm focus:ring-teal-500 focus:border-teal-500">
                                 <option value="">Todos los Roles</option>
                                 <option v-for="rol in roles" :key="rol.id" :value="rol.id">{{ rol.nombre }}</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider">Género (Sexo)</label>
+                            <select v-model="filter.sexo" class="mt-1 block w-full border-gray-300 rounded-lg text-sm shadow-sm focus:ring-teal-500 focus:border-teal-500">
+                                <option value="">Todos</option>
+                                <option value="M">Hombre / Masculino</option>
+                                <option value="F">Mujer / Femenino</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider">Pabellón</label>
+                            <select v-model="filter.pabellon" class="mt-1 block w-full border-gray-300 rounded-lg text-sm shadow-sm focus:ring-teal-500 focus:border-teal-500">
+                                <option value="">Todos</option>
+                                <option value="Pabellón A">Pabellón A</option>
+                                <option value="Pabellón B">Pabellón B</option>
+                                <option value="Pabellón C">Pabellón C</option>
+                                <option value="Pabellón D">Pabellón D</option>
                             </select>
                         </div>
 
@@ -923,33 +967,28 @@ const aprobarMasivo = () => {
                                         <span v-else class="text-xs text-gray-400">N/A</span>
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap">
-                                        <div class="flex flex-col space-y-2">
+                                        <div class="flex flex-col space-y-1">
                                             <span :class="{
                                                 'bg-purple-100 text-purple-800': user.rol?.nombre === 'Superadmin',
                                                 'bg-blue-100 text-blue-800': user.rol?.nombre === 'Encargada',
                                                 'bg-green-100 text-green-800': user.rol?.nombre === 'Estudiante'
-                                            }" class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full self-start">
+                                            }" class="px-2 inline-flex text-[11px] leading-4 font-black rounded-full self-start">
                                                 {{ user.rol?.nombre || 'Sin Rol' }}
                                             </span>
                                             
-                                            <span v-if="user.estado_cuenta === 'Pendiente'" class="px-2 inline-flex text-xs leading-5 font-bold rounded-full bg-yellow-100 text-yellow-800 self-start">
+                                            <span v-if="user.estado_cuenta === 'Pendiente'" class="px-2 inline-flex text-[10px] leading-4 font-bold rounded-full bg-yellow-100 text-yellow-800 self-start">
                                                 Pendiente Habilitación
                                             </span>
-                                            <span v-else-if="user.estado_cuenta === 'Rechazado'" class="px-2 inline-flex text-xs leading-5 font-bold rounded-full bg-red-100 text-red-800 self-start">
+                                            <span v-else-if="user.estado_cuenta === 'Rechazado'" class="px-2 inline-flex text-[10px] leading-4 font-bold rounded-full bg-red-100 text-red-800 self-start">
                                                 Rechazado
                                             </span>
-                                            <span v-else-if="user.estado_cuenta === 'Aprobado'" class="flex flex-col gap-1">
-                                                <span class="px-2 inline-flex text-xs leading-5 font-bold rounded-full bg-teal-100 text-teal-800 self-start">
-                                                    Aprobado
-                                                </span>
-                                                <span v-if="user.rol?.nombre === 'Estudiante' && user.persona?.estudiante" :class="{
-                                                    'bg-green-100 text-green-800': !user.persona.estudiante.estado_global || user.persona.estudiante.estado_global === 'Activo',
-                                                    'bg-gray-100 text-gray-800': user.persona.estudiante.estado_global === 'Retirado',
-                                                    'bg-blue-100 text-blue-800': user.persona.estudiante.estado_global === 'Bachiller',
-                                                    'bg-indigo-100 text-indigo-800': user.persona.estudiante.estado_global === 'Graduado BTH'
-                                                }" class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full self-start">
-                                                    {{ user.persona.estudiante.estado_global || 'Activo' }}
-                                                </span>
+                                            <span v-else-if="user.rol?.nombre === 'Estudiante' && user.persona?.estudiante" :class="{
+                                                'bg-green-100 text-green-800': !user.persona.estudiante.estado_global || user.persona.estudiante.estado_global === 'Activo',
+                                                'bg-gray-100 text-gray-800': user.persona.estudiante.estado_global === 'Retirado',
+                                                'bg-blue-100 text-blue-800': user.persona.estudiante.estado_global === 'Bachiller',
+                                                'bg-indigo-100 text-indigo-800': user.persona.estudiante.estado_global === 'Graduado BTH'
+                                            }" class="px-2 inline-flex text-[10px] leading-4 font-semibold rounded-full self-start">
+                                                {{ user.persona.estudiante.estado_global || 'Activo' }}
                                             </span>
                                         </div>
                                     </td>
@@ -1751,9 +1790,18 @@ const aprobarMasivo = () => {
 
                                     <!-- GRID DE ESTUDIANTES -->
                                     <div class="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-                                        <div class="bg-slate-50 p-4 border-b border-slate-200 flex justify-between items-center">
-                                            <h4 class="font-black text-slate-800 text-sm uppercase tracking-wider">2. Planilla de Estudiantes a Promocionar ({{ promotionForm.promociones.length }})</h4>
-                                            <span class="text-xs font-bold text-slate-500 bg-slate-200 px-2 py-0.5 rounded-full">Únicamente estudiantes actualmente Activos</span>
+                                        <div class="bg-slate-50 p-4 border-b border-slate-200 flex flex-wrap justify-between items-center gap-4">
+                                            <div>
+                                                <h4 class="font-black text-slate-800 text-sm uppercase tracking-wider">2. Planilla de Estudiantes a Promocionar ({{ promotionForm.promociones.length }})</h4>
+                                                <span class="text-xs font-bold text-slate-500 bg-slate-200 px-2 py-0.5 rounded-full">Únicamente estudiantes actualmente Activos</span>
+                                            </div>
+                                            <div class="flex items-center gap-2">
+                                                <span class="text-xs font-black text-slate-600">Filtrar por Curso:</span>
+                                                <select v-model="filterCursoWizard" class="rounded-lg text-xs py-1 px-3 border-gray-300 shadow-sm focus:ring-indigo-500 focus:border-indigo-500 bg-white font-bold text-slate-700">
+                                                    <option value="">[Todos los Cursos]</option>
+                                                    <option v-for="c in cursos" :key="c.id" :value="c.nombre">{{ c.nombre }}</option>
+                                                </select>
+                                            </div>
                                         </div>
                                         <div class="overflow-x-auto max-h-[40vh]">
                                             <table class="min-w-full divide-y divide-slate-200 text-sm">
@@ -1767,7 +1815,7 @@ const aprobarMasivo = () => {
                                                     </tr>
                                                 </thead>
                                                 <tbody class="divide-y divide-slate-100">
-                                                    <tr v-for="(promo, index) in promotionForm.promociones" :key="promo.estudiante_id" class="hover:bg-slate-50/50 transition duration-150">
+                                                    <tr v-for="(promo, index) in promotionForm.promociones" :key="promo.estudiante_id" v-show="!filterCursoWizard || promo.curso_actual_nombre === filterCursoWizard" class="hover:bg-slate-50/50 transition duration-150">
                                                         <td class="px-4 py-3">
                                                             <div class="font-bold text-slate-800">{{ promo.nombre_completo }}</div>
                                                             <div class="text-xs text-slate-400">CI: {{ promo.ci }}</div>

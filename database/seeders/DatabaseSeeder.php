@@ -42,11 +42,12 @@ class DatabaseSeeder extends Seeder
             'ci' => '1000001'
         ]);
         User::factory()->create([
-            'name' => 'Superadmin',
-            'email' => 'admin@internado.test',
-            'password' => Hash::make('password'),
+            'name' => 'administrador',
+            'email' => 'admin@admin.com',
+            'password' => Hash::make('12345678'),
             'persona_ci' => $personaAdmin->ci,
             'rol_id' => $rolSuperadmin->id,
+            'estado_cuenta' => 'Aprobado',
         ]);
 
         // Encargada
@@ -57,10 +58,11 @@ class DatabaseSeeder extends Seeder
         ]);
         User::factory()->create([
             'name' => 'Encargada Maria',
-            'email' => 'encargada@internado.test',
-            'password' => Hash::make('password'),
+            'email' => 'encargada@encargada.com',
+            'password' => Hash::make('12345678'),
             'persona_ci' => $personaEncargada->ci,
             'rol_id' => $rolEncargada->id,
+            'estado_cuenta' => 'Aprobado',
         ]);
 
         // Crear Gestión 2026
@@ -81,15 +83,16 @@ class DatabaseSeeder extends Seeder
         $curso6 = Curso::create(['nombre' => '6to Secundaria']);
 
         // 2 Estudiantes
-        for ($i = 1; $i <= 2; $i++) {
+     /*    for ($i = 1; $i <= 2; $i++) {
             $estudiante = Estudiante::factory()->create();
-            
+
             User::factory()->create([
                 'name' => $estudiante->persona->nombre . ' ' . $estudiante->persona->ap_paterno,
                 'email' => 'estudiante' . $i . '@internado.test',
                 'password' => Hash::make('password'),
                 'persona_ci' => $estudiante->persona_ci,
                 'rol_id' => $rolEstudiante->id,
+                'estado_cuenta' => 'Aprobado',
             ]);
 
             // Inscribir al estudiante
@@ -100,6 +103,6 @@ class DatabaseSeeder extends Seeder
                 'estado_anual' => 'Cursando',
                 'observacion' => 'Inscripción de prueba'
             ]);
-        }
+        } */
     }
 }

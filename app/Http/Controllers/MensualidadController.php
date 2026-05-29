@@ -15,7 +15,7 @@ class MensualidadController extends Controller
 {
     public function index()
     {
-        $mensualidades = Mensualidad::with(['registroInternado.estudiante.persona', 'registroInternado.gestion'])->latest()->get();
+        $mensualidades = Mensualidad::with(['registroInternado.estudiante.persona', 'registroInternado.gestion', 'registroInternado.curso'])->latest()->get();
         
         $gestionActual = Gestion::where('estado', 'Activo')->first();
         $estudiantesActivos = [];
@@ -26,9 +26,12 @@ class MensualidadController extends Controller
                 ->get();
         }
 
+        $gestiones = Gestion::orderBy('nombre_gestion', 'desc')->get();
+
         return Inertia::render('Admin/Mensualidades/Index', [
             'mensualidades' => $mensualidades,
-            'estudiantesActivos' => $estudiantesActivos
+            'estudiantesActivos' => $estudiantesActivos,
+            'gestiones' => $gestiones
         ]);
     }
 

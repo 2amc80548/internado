@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import { Head, useForm } from '@inertiajs/vue3';
-import { ref, computed } from 'vue';
+import { Head, useForm, usePage } from '@inertiajs/vue3';
+import { ref, computed, watch } from 'vue';
 
 const props = defineProps<{
     role: string;
@@ -10,7 +10,26 @@ const props = defineProps<{
     configuracion: any;
 }>();
 
-const activeTab = ref('resumen');
+const page = usePage();
+const activeTab = computed(() => {
+    const url = new URL(page.url, window.location.origin);
+    const tabParam = url.searchParams.get('tab');
+    return tabParam && ['resumen', 'finanzas', 'academico', 'trayectoria'].includes(tabParam) 
+        ? tabParam 
+        : 'resumen';
+});
+
+const selectedRegId = ref(props.registroActual?.id || null);
+
+const selectedRegistro = computed(() => {
+    if (!selectedRegId.value) return props.registroActual;
+    const list = props.estudiante?.registros_internado || props.estudiante?.registrosInternado || [];
+    return list.find((r: any) => r.id === selectedRegId.value) || props.registroActual;
+});
+
+const isSelectedRegActive = computed(() => {
+    return selectedRegistro.value?.id === props.registroActual?.id;
+});
 
 // Computed values
 const cantidadPeriodos = computed(() => {
@@ -33,9 +52,32 @@ const fotoForm = useForm({
 });
 
 const mesesDisponibles = ['Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre'];
-const mesSeleccionado = ref('Febrero');
+
+// Checklist de mensualidades
+const mensualidadesPendientes = computed(() => {
+    const list = selectedRegistro.value?.mensualidades || [];
+    return list.filter((m: any) => m.estado === 'Pendiente');
+});
+
+const mesesSeleccionados = ref<any[]>([]);
+
+watch(selectedRegId, () => {
+    mesesSeleccionados.value = [];
+});
+
+const totalAPagar = computed(() => {
+    return mesesSeleccionados.value.reduce((sum, m) => sum + Number(m.monto), 0);
+});
+
+const deudaTotalGestion = computed(() => {
+    const list = selectedRegistro.value?.mensualidades || [];
+    return list
+        .filter((m: any) => m.estado === 'Pendiente' || m.estado === 'Pendiente_Verificacion')
+        .reduce((sum, m) => sum + Number(m.total), 0);
+});
 
 const submitBoletin = () => {
+    boletinForm.registro_internado_id = selectedRegistro.value?.id;
     boletinForm.post(route('boletines.store'), {
         preserveScroll: true,
         onSuccess: () => {
@@ -46,7 +88,15 @@ const submitBoletin = () => {
 };
 
 const notifyWhatsApp = () => {
-    const mensaje = `Hola, soy ${props.estudiante?.persona?.nombre} ${props.estudiante?.persona?.ap_paterno} (CI: ${props.estudiante?.persona?.ci}). Realicé el pago de mi mensualidad de ${mesSeleccionado.value}.`;
+    if (mesesSeleccionados.value.length === 0) {
+        alert("Por favor, seleccione al menos un mes a pagar.");
+        return;
+    }
+    
+    const gestionNombre = selectedRegistro.value?.gestion?.nombre_gestion || '';
+    const mesesNombres = mesesSeleccionados.value.map(m => m.mes).join(', ');
+    
+    const mensaje = `Hola, soy ${props.estudiante?.persona?.nombre} ${props.estudiante?.persona?.ap_paterno} (CI: ${props.estudiante?.persona?.ci}). Realicé el pago de mis mensualidades de la gestión ${gestionNombre} correspondientes a los meses: ${mesesNombres}. Monto total: Bs. ${totalAPagar.value}.`;
     const encodedMensaje = encodeURIComponent(mensaje);
     window.open(`https://wa.me/59163591312?text=${encodedMensaje}`, '_blank');
 };
@@ -120,31 +170,13 @@ const totalAnios = computed(() => {
 
     <AuthenticatedLayout>
         <template #header>
-            <h2 class="font-semibold text-2xl text-gray-800 leading-tight">
-                Mi Portal
+            <h2 class="font-black text-2xl text-gray-800 leading-tight">
+                Mi Perfil
             </h2>
         </template>
 
         <div class="py-12 bg-gray-50 min-h-screen">
             <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
-
-                <!-- Welcome Section -->
-                <div class="mb-8 p-8 bg-gradient-to-r from-emerald-500 to-teal-600 rounded-2xl shadow-lg text-white relative overflow-hidden">
-                    <div class="relative z-10">
-                        <h3 class="text-3xl font-bold mb-2">¡Hola, {{ estudiante?.persona?.nombre }}!</h3>
-                        <p class="text-emerald-100 text-lg">Bienvenido a tu portal. Aquí puedes ver tu información, subir tus notas y comprobantes de pago.</p>
-                        <p v-if="registroActual" class="mt-4 inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-white text-teal-800 shadow-sm">
-                            Gestión Activa: {{ registroActual.gestion.nombre_gestion }}
-                        </p>
-                    </div>
-                    <!-- Decorative background -->
-                    <div class="absolute right-0 top-0 opacity-10 transform translate-x-1/3 -translate-y-1/4">
-                        <svg width="300" height="300" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M12 14l9-5-9-5-9 5 9 5z" />
-                            <path d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z" />
-                        </svg>
-                    </div>
-                </div>
 
                 <!-- VISTA EXCLUSIVA PARA BACHILLERES -->
                 <div v-if="estudiante?.estado_global === 'Bachiller'" class="space-y-8 animate-fade-in-up">
@@ -256,38 +288,22 @@ const totalAnios = computed(() => {
 
                 <!-- VISTA NORMAL DE ESTUDIANTE ACTIVO -->
                 <div v-else>
-                    <!-- Nav Tabs -->
-                    <div class="mb-6 border-b border-gray-200 overflow-x-auto scrollbar-none">
-                    <nav class="-mb-px flex space-x-6 md:space-x-8 min-w-max" aria-label="Tabs">
-                        <button @click="activeTab = 'resumen'" :class="activeTab === 'resumen' ? 'border-teal-500 text-teal-600 font-bold' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'" class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-lg transition-all duration-300">
-                            📊 Mi Resumen
-                        </button>
-                        <button @click="activeTab = 'finanzas'" :class="activeTab === 'finanzas' ? 'border-teal-500 text-teal-600 font-bold' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'" class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-lg transition-all duration-300">
-                            💰 Pagar Mensualidad
-                        </button>
-                        <button @click="activeTab = 'academico'" :class="activeTab === 'academico' ? 'border-teal-500 text-teal-600 font-bold' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'" class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-lg transition-all duration-300">
-                            📚 Subir Boletines
-                        </button>
-                        <button @click="activeTab = 'trayectoria'" :class="activeTab === 'trayectoria' ? 'border-teal-500 text-teal-600 font-bold' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'" class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-lg transition-all duration-300">
-                            🎓 Mi Trayectoria
-                        </button>
-                    </nav>
-                </div>
-
-                <div v-if="!registroActual" class="bg-white p-12 text-center rounded-3xl shadow-xl border border-gray-100 mb-8">
-                    <div class="w-24 h-24 mx-auto bg-amber-100 text-amber-500 rounded-full flex items-center justify-center mb-6">
-                        <svg class="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    <div v-if="!registroActual" class="bg-white p-12 text-center rounded-3xl shadow-xl border border-gray-100 mb-8">
+                        <div class="w-24 h-24 mx-auto bg-amber-100 text-amber-500 rounded-full flex items-center justify-center mb-6">
+                            <svg class="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        </div>
+                        <h3 class="text-2xl font-black text-gray-900 mb-2">Inscripción en Proceso</h3>
+                        <p class="text-gray-500 max-w-lg mx-auto">Tu cuenta ha sido aprobada para ingresar al sistema, pero el administrador aún no te ha asignado un Curso ni una Gestión Académica. Por favor, comunícate con la administración o vuelve a revisar más tarde.</p>
                     </div>
-                    <h3 class="text-2xl font-black text-gray-900 mb-2">Inscripción en Proceso</h3>
-                    <p class="text-gray-500 max-w-lg mx-auto">Tu cuenta ha sido aprobada para ingresar al sistema, pero el administrador aún no te ha asignado un Curso ni una Gestión Académica. Por favor, comunícate con la administración o vuelve a revisar más tarde.</p>
-                </div>
 
-                <div v-else>
+                    <div v-else class="w-full space-y-8 animate-fade-in-up">
+                        <!-- Right Tab Content Area -->
+                        <div class="w-full">
                     <!-- TAB ACADEMICO -->
                     <div v-show="activeTab === 'academico'" class="animate-fade-in-up">
                         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
-                            <h3 class="text-xl font-bold text-gray-900 mb-6">Mis Boletines Escoares</h3>
-                            <p class="text-gray-600 mb-8">La gestión actual está dividida en <strong>{{ cantidadPeriodos }} {{ tipoPeriodo }}s</strong>. Sube una foto clara o un PDF de tus notas en el periodo que corresponda.</p>
+                            <h3 class="text-xl font-bold text-gray-900 mb-6">Mis Boletines Escolares de la Gestión {{ registroActual?.gestion?.nombre_gestion }}</h3>
+                            <p class="text-gray-600 mb-8">Esta gestión está dividida en <strong>{{ cantidadPeriodos }} {{ tipoPeriodo }}s</strong>. Sube una foto clara o un PDF de tus notas en el periodo que corresponda.</p>
 
                             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                                 <div v-for="periodo in cantidadPeriodos" :key="periodo" class="border border-gray-200 rounded-xl p-6 bg-gray-50 text-center hover:shadow-md transition">
@@ -301,64 +317,119 @@ const totalAnios = computed(() => {
                                         </div>
                                     </div>
                                     <div v-else>
-                                        <label :for="`boletin-${periodo}`" class="mt-4 cursor-pointer flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg bg-white hover:bg-gray-50 transition">
-                                            <div class="flex flex-col items-center justify-center pt-5 pb-6">
-                                                <svg class="w-8 h-8 text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
-                                                <p class="text-sm text-gray-500 font-medium">Subir Archivo</p>
-                                                <p class="text-xs text-gray-400 mt-1">PDF, JPG (Max 5MB)</p></div>
-                                            <input :id="`boletin-${periodo}`" type="file" class="hidden" accept=".pdf,image/*" @change="handleBoletinUpload($event, periodo)" :disabled="boletinForm.processing" />
-                                        </label>
-                                        <div v-if="boletinForm.processing && boletinForm.numero_periodo === periodo" class="mt-2 text-sm text-teal-600 font-medium">Subiendo...</div>
+                                        <template v-if="isSelectedRegActive">
+                                            <label :for="`boletin-${periodo}`" class="mt-4 cursor-pointer flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg bg-white hover:bg-gray-50 transition">
+                                                <div class="flex flex-col items-center justify-center pt-5 pb-6">
+                                                    <svg class="w-8 h-8 text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
+                                                    <p class="text-sm text-gray-500 font-medium">Subir Archivo</p>
+                                                    <p class="text-xs text-gray-400 mt-1">PDF, JPG (Max 5MB)</p>
+                                                </div>
+                                                <input :id="`boletin-${periodo}`" type="file" class="hidden" accept=".pdf,image/*" @change="handleBoletinUpload($event, periodo)" :disabled="boletinForm.processing" />
+                                            </label>
+                                            <div v-if="boletinForm.processing && boletinForm.numero_periodo === periodo" class="mt-2 text-sm text-teal-600 font-medium">Subiendo...</div>
+                                        </template>
+                                        <template v-else>
+                                            <div class="mt-4 p-4 border border-slate-200 rounded-lg bg-slate-50 text-slate-400 text-xs font-semibold">
+                                                No subido en esta gestión.
+                                            </div>
+                                        </template>
                                     </div>
                                 </div>
                             </div>
                         </div>
                     </div>
-
                     <!-- TAB FINANZAS -->
                     <div v-show="activeTab === 'finanzas'" class="animate-fade-in-up">
                         <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                            <!-- Indicador Deuda Consolidada -->
+                            <div class="lg:col-span-3">
+                                <div class="p-5 rounded-3xl flex flex-wrap items-center justify-between gap-4 border transition duration-300"
+                                    :class="deudaTotalGestion > 0 ? 'bg-gradient-to-br from-amber-50 to-orange-50 border-amber-100 text-amber-900' : 'bg-gradient-to-br from-green-50 to-emerald-50 border-green-100 text-green-900'">
+                                    <div class="flex items-center gap-3">
+                                        <div class="p-3 rounded-2xl flex items-center justify-center text-xl shrink-0 shadow-sm" :class="deudaTotalGestion > 0 ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'">
+                                            💰
+                                        </div>
+                                        <div>
+                                            <h4 class="font-black text-sm uppercase tracking-wider">Estado Financiero</h4>
+                                            <div class="flex items-center gap-2 mt-1">
+                                                <span class="text-xs font-semibold text-slate-500">Seleccionar Gestión:</span>
+                                                <select v-model="selectedRegId" class="bg-white hover:bg-slate-50 border border-gray-200 rounded-lg py-0.5 px-2 text-xs font-black text-slate-800 focus:ring-1 focus:ring-teal-500 cursor-pointer">
+                                                    <option v-for="reg in registrosOrdenados" :key="reg.id" :value="reg.id">
+                                                        Gestión {{ reg.gestion?.nombre_gestion }}
+                                                    </option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="text-right">
+                                        <span class="text-xs font-black block uppercase tracking-wider text-slate-400">Deuda Pendiente de Gestión</span>
+                                        <span class="text-2xl font-black" :class="deudaTotalGestion > 0 ? 'text-amber-600' : 'text-green-600'">
+                                            Bs. {{ deudaTotalGestion }}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
 
                             <!-- Instrucciones y QR -->
-                            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden lg:col-span-1 p-6 flex flex-col items-center text-center">
+                            <div class="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden lg:col-span-1 p-6 flex flex-col items-center text-center">
                                 <h3 class="text-lg font-bold text-gray-800 mb-2">QR Oficial de Pagos</h3>
                                 <p class="text-sm text-gray-500 mb-4">Paga desde la App de tu Banco Escaneando este código.</p>
-                                <div class="w-full bg-gray-50 rounded-xl border-2 border-gray-100 flex items-center justify-center mb-4 overflow-hidden p-2">
+                                <div class="w-full bg-gray-50 rounded-2xl border-2 border-gray-100 flex items-center justify-center mb-4 overflow-hidden p-2">
                                     <img v-if="configuracion?.ruta_qr_pagos" :src="`/storage/${configuracion.ruta_qr_pagos}`" alt="QR Pagos" class="w-full max-w-[200px] h-auto object-contain rounded-lg">
                                     <div v-else class="text-gray-400 py-10">QR no configurado</div>
                                 </div>
                                 <p class="text-xs text-teal-700 font-medium bg-teal-50 px-3 py-2 rounded-lg w-full">Puedes descargar la imagen manteniendo presionado sobre ella.</p>
                             </div>
 
-                            <!-- Notificar Pago -->
-                            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden lg:col-span-1">
-                                <div class="px-6 py-5 border-b border-gray-100 bg-teal-50/50">
-                                    <h3 class="text-lg font-bold text-teal-800">Notificar a la Encargada</h3>
-                                </div>
-                                <div class="p-6">
-                                    <p class="text-sm text-gray-600 mb-4">Después de realizar la transferencia, selecciona el mes que estás pagando y presiona el botón para enviar tu comprobante directamente al WhatsApp de administración.</p>
-                                    <div class="space-y-4">
-                                        <div>
-                                            <label class="block text-sm font-medium text-gray-700 mb-1">Mes que estás pagando</label>
-                                            <select v-model="mesSeleccionado" class="w-full rounded-lg border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500">
-                                                <option v-for="mes in mesesDisponibles" :key="mes" :value="mes">{{ mes }}</option>
-                                            </select>
-                                        </div>
+                            <!-- Notificar Pago Checklist -->
+                            <div class="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden lg:col-span-1 flex flex-col justify-between">
+                                <div>
+                                    <div class="px-6 py-5 border-b border-gray-100 bg-teal-50/50">
+                                        <h3 class="text-lg font-bold text-teal-800">Notificar a la Encargada</h3>
+                                    </div>
+                                    <div class="p-6">
+                                        <p class="text-xs text-gray-600 leading-relaxed mb-4">Realiza tu pago vía QR o transferencia y selecciona a continuación los meses que deseas pagar para reportar al WhatsApp administrativo:</p>
                                         
-                                        <div class="pt-4">
-                                            <button @click="notifyWhatsApp" class="w-full flex justify-center items-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-bold text-white bg-[#25D366] hover:bg-[#128C7E] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#25D366] transition transform hover:scale-105">
-                                                <svg class="w-6 h-6 mr-2" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51a12.8 12.8 0 0 0-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.052 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413Z"/></svg>
-                                                Enviar Comprobante por WhatsApp
-                                            </button>
+                                        <!-- Warning if not active year -->
+                                        <div v-if="!isSelectedRegActive" class="mb-4 p-3 bg-amber-50 rounded-xl border border-amber-100 text-[11px] text-amber-800 font-semibold leading-relaxed">
+                                            Estás viendo un registro histórico. Si deseas notificar mensualidades de la gestión actual, selecciona la gestión activa arriba.
+                                        </div>
+
+                                        <div class="space-y-3" v-if="isSelectedRegActive">
+                                            <span class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Seleccionar Meses a Pagar</span>
+                                            
+                                            <div v-if="mensualidadesPendientes.length === 0" class="p-3 bg-green-50 border border-green-200 rounded-xl text-green-800 text-xs font-bold text-center">
+                                                🎉 ¡Felicidades! No tienes mensualidades pendientes en esta gestión.
+                                            </div>
+                                            <div v-else class="max-h-48 overflow-y-auto border border-gray-100 rounded-xl divide-y bg-gray-50/50 p-2.5 space-y-1.5">
+                                                <div v-for="pago in mensualidadesPendientes" :key="pago.id" class="flex items-center gap-2 p-1">
+                                                    <input type="checkbox" :id="`chk-mes-${pago.id}`" :value="pago" v-model="mesesSeleccionados" class="rounded border-gray-300 text-teal-600 focus:ring-teal-500 cursor-pointer">
+                                                    <label :for="`chk-mes-${pago.id}`" class="text-xs font-bold text-gray-700 cursor-pointer flex justify-between w-full">
+                                                        <span>{{ pago.mes }}</span>
+                                                        <span class="text-teal-600 font-black">Bs. {{ pago.monto }}</span>
+                                                    </label>
+                                                </div>
+                                            </div>
+
+                                            <div class="pt-3 border-t border-gray-100 flex justify-between items-center text-xs font-black text-gray-700" v-if="mesesSeleccionados.length > 0">
+                                                <span>Total a Reportar:</span>
+                                                <span class="text-sm text-teal-600">Bs. {{ totalAPagar }}</span>
+                                            </div>
                                         </div>
                                     </div>
+                                </div>
+                                <div class="p-6 pt-0" v-if="isSelectedRegActive && mensualidadesPendientes.length > 0">
+                                    <button @click="notifyWhatsApp" :disabled="mesesSeleccionados.length === 0" class="w-full flex justify-center items-center py-3 px-4 border border-transparent rounded-2xl shadow-sm text-sm font-bold text-white bg-[#25D366] hover:bg-[#128C7E] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#25D366] disabled:opacity-50 disabled:cursor-not-allowed transition transform hover:scale-[1.02]">
+                                        <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51a12.8 12.8 0 0 0-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.052 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413Z"/></svg>
+                                        Enviar Comprobante por WhatsApp
+                                    </button>
                                 </div>
                             </div>
 
                             <!-- Historial Pagos -->
-                            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 lg:col-span-2">
+                            <div class="bg-white rounded-3xl shadow-sm border border-gray-100 lg:col-span-2">
                                 <div class="px-6 py-5 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
-                                    <h3 class="text-lg font-bold text-gray-800">Mi Historial de Mensualidades</h3>
+                                    <h3 class="text-lg font-bold text-gray-800">Mi Historial de Mensualidades (Gestión {{ selectedRegistro?.gestion?.nombre_gestion }})</h3>
                                 </div>
                                 <div class="p-6">
                                     <div class="overflow-x-auto">
@@ -371,7 +442,7 @@ const totalAnios = computed(() => {
                                                 </tr>
                                             </thead>
                                             <tbody class="text-gray-600">
-                                                <tr v-for="pago in registroActual.mensualidades" :key="pago.id" class="border-t border-gray-50 hover:bg-gray-50/50 transition">
+                                                <tr v-for="pago in selectedRegistro?.mensualidades" :key="pago.id" class="border-t border-gray-50 hover:bg-gray-50/50 transition">
                                                     <td class="py-4 font-medium text-gray-900">{{ pago.mes }}</td>
                                                     <td class="py-4">Bs. {{ pago.monto }}</td>
                                                     <td class="py-4">
@@ -380,8 +451,8 @@ const totalAnios = computed(() => {
                                                         <span v-else class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">Pendiente</span>
                                                     </td>
                                                 </tr>
-                                                <tr v-if="!registroActual.mensualidades || registroActual.mensualidades.length === 0">
-                                                    <td colspan="3" class="py-8 text-center text-gray-400">No tienes historial de pagos registrado aún.</td>
+                                                <tr v-if="!selectedRegistro?.mensualidades || selectedRegistro?.mensualidades.length === 0">
+                                                    <td colspan="3" class="py-8 text-center text-gray-400">No tienes historial de pagos registrado aún en esta gestión.</td>
                                                 </tr>
                                             </tbody>
                                         </table>
@@ -393,143 +464,188 @@ const totalAnios = computed(() => {
 
                     <!-- TAB RESUMEN (DASHBOARD) -->
                     <div v-show="activeTab === 'resumen'" class="animate-fade-in-up">
-                        
                         <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                            <!-- Datos Personales y Estado (Diseño Tipo Carnet) -->
-                            <div class="lg:col-span-2 flex justify-center">
-                                <div class="bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden w-full max-w-2xl relative">
-                                    
-                                    <!-- Cabecera Carnet -->
-                                    <div class="bg-teal-700 h-24 flex items-center justify-between px-6">
-                                        <div class="text-white flex items-center gap-3">
-                                            <div class="p-2 bg-white/20 rounded-lg">
-                                                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg>
-                                            </div>
-                                            <div>
-                                                <h4 class="font-black text-xl tracking-widest uppercase">INTERNADO</h4>
-                                                <p class="text-teal-200 text-xs font-medium tracking-widest">CREDENCIAL DE ESTUDIANTE</p>
-                                            </div>
-                                        </div>
-                                        <div class="text-right text-white">
-                                            <p class="text-xs font-bold opacity-80 uppercase tracking-widest">Gestión</p>
-                                            <p class="text-xl font-black">{{ registroActual.gestion?.nombre_gestion || '2026' }}</p>
-                                        </div>
+                            <!-- Perfil de Estudiante de Internado Premium -->
+                            <div class="lg:col-span-3 space-y-6">
+                                <!-- Banner Superior de Perfil / Cover -->
+                                <div class="bg-white rounded-3xl overflow-hidden shadow-sm border border-gray-100 relative">
+                                    <div class="h-36 bg-gradient-to-r from-teal-500 via-emerald-500 to-indigo-600 relative">
+                                        <!-- Decorative dynamic design -->
+                                        <div class="absolute inset-0 opacity-15 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-white via-transparent to-transparent"></div>
                                     </div>
-                                    
-                                    <!-- Cuerpo Carnet -->
-                                    <div class="p-6 relative">
-                                        <!-- Marca de agua de fondo -->
-                                        <div class="absolute inset-0 flex items-center justify-center opacity-[0.03] pointer-events-none">
-                                            <svg class="w-64 h-64" fill="currentColor" viewBox="0 0 24 24"><path d="M12 14l9-5-9-5-9 5 9 5z" /><path d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z" /></svg>
+                                    <div class="px-6 pb-6 relative pt-16 flex flex-col md:flex-row items-center md:items-end gap-6">
+                                        <!-- Floating Profile Picture (Larger & Static) -->
+                                        <div class="absolute -top-20 left-1/2 md:left-8 transform -translate-x-1/2 md:translate-x-0 w-40 h-40 bg-white p-1.5 rounded-full shadow-md overflow-hidden shrink-0">
+                                            <div class="w-full h-full rounded-full overflow-hidden bg-gray-50 flex items-center justify-center border border-gray-200">
+                                                <img v-if="estudiante.ruta_foto" :src="estudiante.ruta_foto.startsWith('http') || estudiante.ruta_foto.startsWith('/') ? estudiante.ruta_foto : '/storage/' + estudiante.ruta_foto" class="w-full h-full object-cover">
+                                                <svg v-else class="w-16 h-16 text-gray-300" fill="currentColor" viewBox="0 0 24 24"><path d="M24 20.993V24H0v-2.996A14.977 14.977 0 0112.004 15c4.904 0 9.26 2.354 11.996 5.993zM16.002 8.999a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+                                            </div>
                                         </div>
                                         
-                                        <div class="flex flex-col sm:flex-row gap-6 relative z-10">
-                                                <!-- Foto Column -->
-                                            <div class="flex flex-col items-center shrink-0">
-                                                <div class="w-32 h-40 bg-gray-100 rounded-lg border-2 border-gray-300 shadow-inner flex items-center justify-center overflow-hidden relative group">
-                                                    <img v-if="estudiante.ruta_foto" :src="estudiante.ruta_foto.startsWith('http') || estudiante.ruta_foto.startsWith('/') ? estudiante.ruta_foto : '/storage/' + estudiante.ruta_foto" class="w-full h-full object-cover">
-                                                    <svg v-else class="w-20 h-20 text-gray-300" fill="currentColor" viewBox="0 0 24 24"><path d="M24 20.993V24H0v-2.996A14.977 14.977 0 0112.004 15c4.904 0 9.26 2.354 11.996 5.993zM16.002 8.999a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
-                                                    
-                                                    <label class="absolute inset-0 bg-black/60 text-white flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 cursor-pointer transition-all duration-300 backdrop-blur-xs">
-                                                        <svg class="w-8 h-8 mb-1 transform group-hover:scale-110 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
-                                                        <span class="text-xs font-black text-center tracking-wider px-2 uppercase">{{ estudiante.ruta_foto ? 'Cambiar Foto' : 'Subir Foto' }}</span>
-                                                        <input type="file" class="hidden" accept="image/*" @change="handleFotoChange" :disabled="fotoForm.processing">
-                                                    </label>
-                                                </div>
-                                                <span v-if="fotoForm.processing" class="text-xs text-teal-600 font-bold mt-1">Subiendo...</span>
-                                                <span v-if="fotoForm.errors.foto" class="text-xs text-red-600 font-bold mt-1 text-center">{{ fotoForm.errors.foto }}</span>
- 
+                                        <!-- Profile Info -->
+                                        <div class="flex-1 text-center md:text-left mt-20 md:mt-0 pt-2 space-y-1.5">
+                                            <div class="flex flex-col md:flex-row md:items-center gap-2">
+                                                <h3 class="text-3xl font-black text-slate-800 uppercase tracking-tight leading-none">
+                                                    {{ estudiante.persona.nombre }} {{ estudiante.persona.ap_paterno }} {{ estudiante.persona.ap_materno }}
+                                                </h3>
                                                 <span :class="{
-                                                    'bg-green-100 text-green-800 border-green-200': registroActual.estado_anual === 'Cursando' || registroActual.estado_anual === 'Aprobado',
-                                                    'bg-red-100 text-red-800 border-red-200': registroActual.estado_anual === 'Retirado' || registroActual.estado_anual === 'Reprobado'
-                                                }" class="mt-4 px-4 py-1.5 border text-xs leading-5 font-black uppercase tracking-wider rounded-full shadow-sm">
-                                                    {{ registroActual.estado_anual }}
+                                                    'bg-green-100 text-green-800 border-green-200': registroActual?.estado_anual === 'Cursando' || registroActual?.estado_anual === 'Aprobado',
+                                                    'bg-red-100 text-red-800 border-red-200': registroActual?.estado_anual === 'Retirado' || registroActual?.estado_anual === 'Reprobado'
+                                                }" class="inline-flex self-center px-3.5 py-1 border text-xs font-black uppercase tracking-wider rounded-full shadow-xs">
+                                                    {{ registroActual?.estado_anual || 'Cursando' }}
                                                 </span>
                                             </div>
- 
-                                            <!-- Data Column -->
-                                            <div class="flex-1 flex flex-col justify-center space-y-4">
+                                            <p class="text-gray-500 text-sm font-bold uppercase tracking-wider flex items-center justify-center md:justify-start gap-1.5">
+                                                <span>🏫 Interno Habilitado</span> &bull; 
+                                                <span class="text-teal-600 font-extrabold bg-teal-50 border border-teal-200 px-2.5 py-0.5 rounded-md">Gestión {{ registroActual?.gestion?.nombre_gestion }}</span>
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Grid de Contenedores de Información -->
+                                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                    <!-- Datos de Internación / Ubicación -->
+                                    <div class="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 flex flex-col justify-between hover:shadow-md transition duration-300">
+                                        <div>
+                                            <div class="flex items-center gap-2.5 mb-5 border-b border-gray-50 pb-3">
+                                                <div class="p-2 bg-teal-50 text-teal-600 rounded-xl">
+                                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg>
+                                                </div>
+                                                <h4 class="font-black text-slate-800 text-sm uppercase tracking-wider">🏢 Mi Internación</h4>
+                                            </div>
+                                            <div class="space-y-4">
                                                 <div>
-                                                    <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Apellidos</p>
-                                                    <p class="text-xl font-black text-gray-800 leading-none uppercase">{{ estudiante.persona.ap_paterno }} {{ estudiante.persona.ap_materno }}</p>
+                                                    <span class="block text-[11px] font-black text-slate-400 uppercase tracking-wider mb-1">Pabellón Designado</span>
+                                                    <span class="text-base font-black text-slate-800">{{ registroActual?.pabellon || 'Sin Asignar' }}</span>
                                                 </div>
                                                 <div>
-                                                    <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Nombres</p>
-                                                    <p class="text-xl font-bold text-gray-800 leading-none uppercase">{{ estudiante.persona.nombre }}</p>
+                                                    <span class="block text-[11px] font-black text-slate-400 uppercase tracking-wider mb-1">Número de Cama</span>
+                                                    <span class="text-sm font-black text-teal-700 bg-teal-50 px-2.5 py-1 rounded-lg border border-teal-100 inline-block">Cama {{ registroActual?.cama || 'S/N' }}</span>
                                                 </div>
-                                                
-                                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-                                                    <div>
-                                                        <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Documento CI</p>
-                                                        <p class="text-sm font-bold text-gray-700">{{ estudiante.persona.ci }}</p>
-                                                    </div>
-                                                    <div>
-                                                        <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Curso / Grado</p>
-                                                        <p class="text-sm font-bold text-teal-700">{{ registroActual.curso?.nombre || 'S/N' }}</p>
-                                                    </div>
-                                                    <div>
-                                                        <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Comunidad</p>
-                                                        <p class="text-sm font-bold text-gray-700">{{ estudiante.comunidad?.nombre || 'S/N' }}</p>
-                                                    </div>
-                                                    <div>
-                                                        <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Tutor Apoderado</p>
-                                                        <p class="text-sm font-bold text-gray-700 truncate">{{ estudiante.tutor?.persona?.nombre }} {{ estudiante.tutor?.persona?.ap_paterno }}</p>
-                                                    </div>
+                                                <div>
+                                                    <span class="block text-[11px] font-black text-slate-400 uppercase tracking-wider mb-1">Comunidad de Origen</span>
+                                                    <span class="text-base font-black text-slate-800">{{ estudiante.comunidad?.nombre || 'S/N' }}</span>
                                                 </div>
-                                            </div>                                   </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Datos Académicos -->
+                                    <div class="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 flex flex-col justify-between hover:shadow-md transition duration-300">
+                                        <div>
+                                            <div class="flex items-center gap-2.5 mb-5 border-b border-gray-50 pb-3">
+                                                <div class="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
+                                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
+                                                </div>
+                                                <h4 class="font-black text-slate-800 text-sm uppercase tracking-wider">📚 Nivel Académico</h4>
+                                            </div>
+                                            <div class="space-y-4">
+                                                <div>
+                                                    <span class="block text-[11px] font-black text-slate-400 uppercase tracking-wider mb-1">Grado / Curso Regular</span>
+                                                    <span class="text-base font-black text-slate-800">{{ registroActual?.curso?.nombre || 'S/N' }}</span>
+                                                </div>
+                                                <div>
+                                                    <span class="block text-[11px] font-black text-slate-400 uppercase tracking-wider mb-1">Carrera Técnica BTH</span>
+                                                    <span class="text-xs font-black text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-100 inline-block truncate max-w-full" :title="registroActual?.curso_bth?.carrera_tecnica?.nombre">
+                                                        {{ registroActual?.curso_bth?.carrera_tecnica?.nombre || 'Ninguna Especialidad' }}
+                                                    </span>
+                                                </div>
+                                                <div>
+                                                    <span class="block text-[11px] font-black text-slate-400 uppercase tracking-wider mb-1">Años Cursados en Internado</span>
+                                                    <span class="text-base font-black text-slate-800">{{ totalAnios }} {{ totalAnios === 1 ? 'Año' : 'Años' }}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Datos de Contacto y Apoderado -->
+                                    <div class="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 flex flex-col justify-between hover:shadow-md transition duration-300">
+                                        <div>
+                                            <div class="flex items-center gap-2.5 mb-5 border-b border-gray-50 pb-3">
+                                                <div class="p-2 bg-blue-50 text-blue-600 rounded-xl">
+                                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.94.725l.548 2.2a1 1 0 01-.321.988l-1.305.98a10.582 10.582 0 004.872 4.872l.98-1.305a1 1 0 01.988-.321l2.2.548a1 1 0 01.725.94V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"></path></svg>
+                                                </div>
+                                                <h4 class="font-black text-slate-800 text-sm uppercase tracking-wider">📞 Familia y CI</h4>
+                                            </div>
+                                            <div class="space-y-4">
+                                                <div>
+                                                    <span class="block text-[11px] font-black text-slate-400 uppercase tracking-wider mb-1">Cédula de Identidad CI</span>
+                                                    <span class="text-base font-black text-slate-800">{{ estudiante.persona.ci }}</span>
+                                                </div>
+                                                <div>
+                                                    <span class="block text-[11px] font-black text-slate-400 uppercase tracking-wider mb-1">Tutor Apoderado</span>
+                                                    <span class="text-base font-black text-slate-800 block truncate">{{ estudiante.tutor?.persona?.nombre }} {{ estudiante.tutor?.persona?.ap_paterno }}</span>
+                                                </div>
+                                                <div>
+                                                    <span class="block text-[11px] font-black text-slate-400 uppercase tracking-wider mb-1">Celular del Tutor</span>
+                                                    <span class="text-base font-black text-slate-800">{{ estudiante.tutor?.persona?.celular || 'S/N' }}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Fila de Alertas y Progreso en el Resumen -->
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <!-- Progreso de Mensualidades Widget -->
+                                    <div class="bg-white rounded-3xl p-6 shadow-sm border border-gray-100">
+                                        <h4 class="font-black text-slate-800 text-sm uppercase tracking-wider mb-4 flex items-center gap-2">
+                                            <span>💳</span> Progreso de Mensualidades
+                                        </h4>
+                                        <div class="relative pt-1">
+                                            <div class="flex mb-2 items-center justify-between">
+                                                <div>
+                                                    <span class="text-xs font-black inline-block py-1 px-2.5 uppercase rounded-full text-teal-600 bg-teal-50 border border-teal-100">
+                                                        Al corriente
+                                                    </span>
+                                                </div>
+                                                <div class="text-right">
+                                                    <span class="text-sm font-black text-teal-600">
+                                                        {{ (registroActual?.mensualidades?.filter(m => m.estado === 'Pagado').length || 0) }} / 10 meses
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <div class="overflow-hidden h-3.5 mb-4 text-xs flex rounded-full bg-teal-100/50">
+                                                <div :style="`width: ${((registroActual?.mensualidades?.filter(m => m.estado === 'Pagado').length || 0) / 10) * 100}%`" class="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-teal-500 rounded-full transition-all duration-500"></div>
+                                            </div>
                                         </div>
                                         
-                                        <!-- Footer Line -->
-                                        <div class="mt-6 pt-4 border-t-2 border-dashed border-gray-200 flex justify-between items-center text-xs">
-                                            <div class="flex items-center gap-2">
-                                                <div class="w-8 h-8 bg-gray-100 rounded flex items-center justify-center border border-gray-200">
-                                                    <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"></path></svg>
+                                        <div v-if="(registroActual?.mensualidades?.filter(m => m.estado === 'Pagado').length || 0) < Math.max(1, new Date().getMonth() - 1)" class="mt-4 p-4 bg-red-50 rounded-2xl border border-red-100 flex items-start gap-3">
+                                            <span class="text-red-500 text-xl leading-none">⚠️</span>
+                                            <div>
+                                                <p class="text-sm font-black text-red-800">Alerta de Mensualidades Pendientes</p>
+                                                <p class="text-xs text-red-600 mt-0.5 leading-relaxed">Presentas meses con cobro pendiente. Por favor, regulariza tu cuenta a la brevedad.</p>
+                                            </div>
+                                        </div>
+                                        <div v-else class="mt-4 p-4 bg-green-50 rounded-2xl border border-green-100 flex items-start gap-3">
+                                            <span class="text-green-500 text-xl leading-none">✨</span>
+                                            <div>
+                                                <p class="text-sm font-black text-green-800">¡Cuenta al Día!</p>
+                                                <p class="text-xs text-green-600 mt-0.5 leading-relaxed">No registras atrasos de pago detectados en esta gestión.</p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Estado Académico / Conducta -->
+                                    <div class="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 flex flex-col justify-between">
+                                        <div>
+                                            <h4 class="font-black text-slate-800 text-sm uppercase tracking-wider mb-4 flex items-center gap-2">
+                                                <span>🛡️</span> Estado Conductual y Faltas
+                                            </h4>
+                                            <div class="flex items-center gap-4">
+                                                <div class="w-16 h-16 rounded-2xl flex items-center justify-center shrink-0 bg-green-50 text-green-600 border border-green-100">
+                                                    <span class="text-2xl font-black">{{ registroActual?.incidencias?.length || 0 }}</span>
                                                 </div>
                                                 <div>
-                                                    <p class="font-bold text-gray-800">Ubicación</p>
-                                                    <p class="text-gray-500 font-medium">{{ registroActual.pabellon }} - Cama {{ registroActual.cama }}</p>
+                                                    <p class="text-base font-black text-slate-800">Faltas Registradas</p>
+                                                    <p class="text-xs text-slate-500 mt-0.5 leading-relaxed">
+                                                        {{ (registroActual?.incidencias?.length || 0) === 0 ? '¡Excelente conducta! No tienes faltas ni reportes en tu registro.' : 'Registras incidencias académicas o de conducta. Revisa tu historial en la administración.' }}
+                                                    </p>
                                                 </div>
                                             </div>
-                                            <div class="text-right">
-                                                <p class="font-bold text-gray-800">Uso Exclusivo</p>
-                                                <p class="text-gray-500 font-medium">Personal e Intransferible</p>
-                                            </div>
                                         </div>
                                     </div>
-                                    <div class="h-2 bg-gradient-to-r from-teal-500 to-blue-500"></div>
-                                </div>
-                            
-                            <!-- Alerta de Deudas y Progreso -->
-                            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 lg:col-span-1 flex flex-col justify-center">
-                                <h3 class="text-lg font-bold text-gray-900 mb-4 text-center">Progreso de Mensualidades</h3>
-                                
-                                <div class="relative pt-1">
-                                    <div class="flex mb-2 items-center justify-between">
-                                        <div>
-                                            <span class="text-xs font-semibold inline-block py-1 px-2 uppercase rounded-full text-teal-600 bg-teal-200">
-                                                Pagado
-                                            </span>
-                                        </div>
-                                        <div class="text-right">
-                                            <span class="text-xs font-semibold inline-block text-teal-600">
-                                                {{ (registroActual.mensualidades?.filter(m => m.estado === 'Pagado').length || 0) }} / 10 meses
-                                            </span>
-                                        </div>
-                                    </div>
-                                    <div class="overflow-hidden h-3 mb-4 text-xs flex rounded bg-teal-100">
-                                        <div :style="`width: ${((registroActual.mensualidades?.filter(m => m.estado === 'Pagado').length || 0) / 10) * 100}%`" class="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-teal-500"></div>
-                                    </div>
-                                </div>
-                                
-                                <div v-if="(registroActual.mensualidades?.filter(m => m.estado === 'Pagado').length || 0) < Math.max(1, new Date().getMonth() - 1)" class="mt-4 p-4 bg-red-50 rounded-xl border border-red-100 text-center">
-                                    <svg class="w-8 h-8 text-red-500 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
-                                    <p class="text-sm font-bold text-red-800">Alerta de Atraso</p>
-                                    <p class="text-xs text-red-600 mt-1">Registras menos pagos que los meses transcurridos del año. Por favor, regulariza tu situación.</p>
-                                </div>
-                                <div v-else class="mt-4 p-4 bg-green-50 rounded-xl border border-green-100 text-center">
-                                    <svg class="w-8 h-8 text-green-500 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                                    <p class="text-sm font-bold text-green-800">¡Al Día!</p>
-                                    <p class="text-xs text-green-600 mt-1">No presentas deudas atrasadas detectadas en el sistema.</p>
                                 </div>
                             </div>
                         </div>
@@ -547,7 +663,7 @@ const totalAnios = computed(() => {
                                         </tr>
                                     </thead>
                                     <tbody class="text-gray-600">
-                                        <tr v-for="incidencia in registroActual.incidencias" :key="incidencia.id" class="border-t border-gray-50">
+                                        <tr v-for="incidencia in registroActual?.incidencias || []" :key="incidencia.id" class="border-t border-gray-50">
                                             <td class="py-4">{{ new Date(incidencia.fecha_incidencia).toLocaleDateString() }}</td>
                                             <td class="py-4">
                                                 <span :class="incidencia.gravedad === 'Leve' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium">
@@ -556,7 +672,7 @@ const totalAnios = computed(() => {
                                             </td>
                                             <td class="py-4 truncate max-w-xs">{{ incidencia.descripcion }}</td>
                                         </tr>
-                                        <tr v-if="!registroActual.incidencias || registroActual.incidencias.length === 0">
+                                        <tr v-if="!registroActual?.incidencias || registroActual.incidencias.length === 0">
                                             <td colspan="3" class="py-8 text-center text-gray-400">¡Felicidades! No tienes faltas disciplinarias.</td>
                                         </tr>
                                     </tbody>
@@ -645,9 +761,9 @@ const totalAnios = computed(() => {
                     </div>
                 </div>
             </div>
-
-            </div>
         </div>
+    </div>
+</div>
     </AuthenticatedLayout>
 </template>
 
@@ -665,5 +781,13 @@ const totalAnios = computed(() => {
         opacity: 1;
         transform: translateY(0);
     }
+}
+
+.no-scrollbar::-webkit-scrollbar {
+    display: none;
+}
+.no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
 }
 </style>

@@ -33,6 +33,9 @@ class HandleInertiaRequests extends Middleware
             ...parent::share($request),
             'auth' => [
                 'user' => $request->user() ? clone $request->user()->load(['rol.permisos']) : null,
+                'estudiante' => $request->user() && $request->user()->rol?->nombre === 'Estudiante'
+                    ? \App\Models\Estudiante::where('persona_ci', $request->user()->persona_ci)->first()
+                    : null,
             ],
             'flash' => [
                 'success' => $request->session()->get('success'),

@@ -110,19 +110,6 @@ const maxTotalRecaudado = computed(() => {
         <div class="py-12 bg-gray-50 min-h-screen">
             <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-8">
                 
-                <!-- Welcome Section with Premium Gradient -->
-                <div class="p-6 sm:p-8 bg-gradient-to-r from-teal-600 via-indigo-600 to-purple-600 rounded-3xl shadow-xl text-white relative overflow-hidden group">
-                    <div class="absolute -right-10 -bottom-10 opacity-10 group-hover:scale-110 transition-transform duration-500">
-                        <svg class="w-64 h-64" fill="currentColor" viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v-2H7v-2h7V9H7V7h7c1.1 0 2 .9 2 2v6c0 1.1-.9 2-2 2z"></path></svg>
-                    </div>
-                    <div class="relative z-10 space-y-2">
-                        <span class="px-3 py-1 rounded-full text-xs font-black uppercase bg-white/20 text-white backdrop-blur-sm border border-white/10 tracking-widest">Panel de Control</span>
-                        <h3 class="text-3xl sm:text-4xl font-extrabold tracking-tight">¡Hola, {{ role }}!</h3>
-                        <p class="text-teal-100 max-w-2xl text-sm sm:text-base font-semibold leading-relaxed">
-                            Aquí tienes el control central del internado. Gestiona cobros, valida cuentas y realiza el seguimiento de la trayectoria académica de forma unificada.
-                        </p>
-                    </div>
-                </div>
 
                 <!-- 4 Metrics Cards Grid -->
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">

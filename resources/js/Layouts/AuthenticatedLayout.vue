@@ -1,10 +1,26 @@
 <script setup>
-import { ref } from 'vue';
+import { ref, provide, computed } from 'vue';
 import ApplicationLogo from '@/Components/ApplicationLogo.vue';
-import { Link, usePage } from '@inertiajs/vue3';
+import { Link, usePage, router } from '@inertiajs/vue3';
 
-const showingNavigationSidebar = ref(false);
 const page = usePage();
+const showingNavigationSidebar = ref(typeof window !== 'undefined' ? window.innerWidth >= 768 : true);
+
+const activeTab = computed(() => {
+    const url = new URL(page.url, window.location.origin);
+    const tabParam = url.searchParams.get('tab');
+    return tabParam && ['resumen', 'finanzas', 'academico', 'trayectoria'].includes(tabParam) 
+        ? tabParam 
+        : 'resumen';
+});
+
+const selectTab = (tab) => {
+    router.visit(route('estudiante.portal', { tab }), {
+        preserveState: true,
+        preserveScroll: true,
+        replace: true
+    });
+};
 
 const getRoleName = () => {
     return page.props.auth.user?.rol?.nombre || 'Usuario';
@@ -62,66 +78,111 @@ const visibleMenuItems = menuItems.filter(item => item.show);
     <div class="min-h-screen bg-gray-50 flex">
         
         <!-- Sidebar Navigation -->
-        <aside class="fixed inset-y-0 left-0 bg-gray-900 w-64 shadow-xl z-50 transform transition-transform duration-300 md:translate-x-0"
+        <aside class="fixed inset-y-0 left-0 bg-gray-900 w-64 shadow-xl z-50 transform transition-transform duration-300 flex flex-col justify-between"
             :class="{ '-translate-x-full': !showingNavigationSidebar, 'translate-x-0': showingNavigationSidebar }">
             
-            <div class="flex items-center justify-between h-20 border-b border-gray-800 px-6">
-                <Link :href="route('dashboard')" class="flex items-center gap-3">
-                    <div class="bg-teal-500 text-white p-2 rounded-lg">
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg>
-                    </div>
-                    <span class="text-white font-bold text-xl tracking-wider">INTERNADO</span>
-                </Link>
-                <button @click="showingNavigationSidebar = false" class="md:hidden text-gray-400 hover:text-white">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-                </button>
+            <div class="flex flex-col flex-1">
+                <div class="flex items-center justify-between h-20 border-b border-gray-800 px-6">
+                    <Link :href="route('dashboard')" class="flex items-center gap-3">
+                        <div class="bg-teal-500 text-white p-2 rounded-lg">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg>
+                        </div>
+                        <span class="text-white font-bold text-xl tracking-wider">INTERNADO</span>
+                    </Link>
+                    <button @click="showingNavigationSidebar = false" class="md:hidden text-gray-400 hover:text-white">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                </div>
+
+                <nav class="mt-6 px-4 space-y-2 overflow-y-auto flex-1">
+                    <template v-for="item in visibleMenuItems" :key="item.name">
+                        <Link :href="item.route && route().has(item.route) ? route(item.route) : '#'"
+                            :class="[route().current(item.route) ? 'bg-gray-800 text-teal-400 font-extrabold' : 'text-gray-300 hover:bg-gray-800 hover:text-white font-medium', 'group flex items-center px-4 py-3 text-sm rounded-xl transition-all duration-200']">
+                            <svg class="mr-3 flex-shrink-0 h-5 w-5" :class="[route().current(item.route) ? 'text-teal-400' : 'text-gray-400 group-hover:text-white']" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" :d="item.icon" />
+                            </svg>
+                            {{ item.name }}
+                        </Link>
+                        
+                        <!-- If this item is Dashboard and the user is a Student, render the active student tabs underneath -->
+                        <div v-if="item.name === 'Dashboard' && getRoleName() === 'Estudiante' && $page.props.auth.estudiante?.estado_global !== 'Bachiller'" class="pl-4 space-y-0.5 border-l border-gray-800 ml-6 mt-1 mb-2">
+                            <button @click="selectTab('resumen')" 
+                                :class="activeTab === 'resumen' ? 'text-teal-400 font-black bg-gray-800/60 shadow-sm border-l-2 border-teal-500' : 'text-gray-400 hover:bg-gray-800/20 hover:text-white font-bold border-l-2 border-transparent'" 
+                                class="w-full flex items-center px-3.5 py-2 text-xs rounded-r-lg transition-all duration-200 gap-2 text-left">
+                                <span>📊</span> Mi Resumen
+                            </button>
+                            <button @click="selectTab('finanzas')" 
+                                :class="activeTab === 'finanzas' ? 'text-teal-400 font-black bg-gray-800/60 shadow-sm border-l-2 border-teal-500' : 'text-gray-400 hover:bg-gray-800/20 hover:text-white font-bold border-l-2 border-transparent'" 
+                                class="w-full flex items-center px-3.5 py-2 text-xs rounded-r-lg transition-all duration-200 gap-2 text-left">
+                                <span>💰</span> Mensualidad
+                            </button>
+                            <button @click="selectTab('academico')" 
+                                :class="activeTab === 'academico' ? 'text-teal-400 font-black bg-gray-800/60 shadow-sm border-l-2 border-teal-500' : 'text-gray-400 hover:bg-gray-800/20 hover:text-white font-bold border-l-2 border-transparent'" 
+                                class="w-full flex items-center px-3.5 py-2 text-xs rounded-r-lg transition-all duration-200 gap-2 text-left">
+                                <span>📚</span> Boletines
+                            </button>
+                            <button @click="selectTab('trayectoria')" 
+                                :class="activeTab === 'trayectoria' ? 'text-teal-400 font-black bg-gray-800/60 shadow-sm border-l-2 border-teal-500' : 'text-gray-400 hover:bg-gray-800/20 hover:text-white font-bold border-l-2 border-transparent'" 
+                                class="w-full flex items-center px-3.5 py-2 text-xs rounded-r-lg transition-all duration-200 gap-2 text-left">
+                                <span>🎓</span> Trayectoria
+                            </button>
+                        </div>
+                    </template>
+                </nav>
             </div>
 
-            <!-- User Profile Widget (Movido a la barra superior) -->
-
-            <nav class="mt-6 px-4 space-y-2">
-                <Link v-for="item in visibleMenuItems" :key="item.name" :href="item.route && route().has(item.route) ? route(item.route) : '#'"
-                    :class="[route().current(item.route) ? 'bg-gray-800 text-teal-400' : 'text-gray-300 hover:bg-gray-800 hover:text-white', 'group flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200']">
-                    <svg class="mr-3 flex-shrink-0 h-5 w-5" :class="[route().current(item.route) ? 'text-teal-400' : 'text-gray-400 group-hover:text-white']" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" :d="item.icon" />
-                    </svg>
-                    {{ item.name }}
-                </Link>
-            </nav>
-
-            <!-- Logout movido a topbar -->
+            <!-- Sidebar Footer: Profile and Logout (Only for non-students) -->
+            <div v-if="getRoleName() !== 'Estudiante'" class="p-4 border-t border-gray-800 bg-gray-950/50">
+                <div class="flex items-center gap-3 mb-4">
+                    <div class="h-10 w-10 rounded-full bg-gradient-to-r from-teal-500 to-blue-600 flex items-center justify-center text-white font-bold shadow-md shrink-0">
+                        {{ $page.props.auth.user.name.charAt(0) }}
+                    </div>
+                    <div class="text-left overflow-hidden">
+                        <p class="text-sm font-bold text-gray-200 leading-tight truncate">{{ $page.props.auth.user.name }}</p>
+                        <p class="text-xs text-teal-400 font-medium truncate">{{ getRoleName() }}</p>
+                    </div>
+                </div>
+                <div class="flex flex-col gap-2">
+                    <Link :href="route('profile.edit')" class="flex items-center justify-center gap-2 w-full py-2 px-4 rounded-xl text-sm font-semibold text-gray-300 bg-gray-800 hover:bg-gray-700 hover:text-white transition-all duration-200">
+                        <span>👤</span> Mi Perfil
+                    </Link>
+                    <Link :href="route('logout')" method="post" as="button" class="flex items-center justify-center gap-2 w-full py-2 px-4 rounded-xl text-sm font-semibold text-red-400 bg-red-500/10 hover:bg-red-500 hover:text-white border border-red-500/20 transition-all duration-200">
+                        <span>🚪</span> Salir
+                    </Link>
+                </div>
+            </div>
         </aside>
 
         <!-- Main Content Wrapper -->
-        <div class="flex-1 flex flex-col md:ml-64 transition-all duration-300">
+        <div class="flex-1 flex flex-col transition-all duration-300"
+            :class="{ 'md:ml-64': showingNavigationSidebar, 'md:ml-0': !showingNavigationSidebar }">
             <!-- Topbar (Mobile Hamburger & Quick Actions) -->
             <header class="bg-white shadow-sm border-b border-gray-200 h-16 flex items-center justify-between px-4 sm:px-6 lg:px-8 z-40 sticky top-0">
-                <div class="flex items-center">
-                    <button @click="showingNavigationSidebar = true" class="md:hidden p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none">
-                        <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
-                    </button>
-                    <!-- Slot for dynamic header titles -->
-                    <div class="hidden md:block ml-4">
-                        <slot name="header" />
-                    </div>
-                </div>
-                
-                <div class="flex items-center gap-6">
-                    <div class="hidden sm:flex items-center gap-3 border-r pr-6">
-                        <div class="text-right">
-                            <p class="text-sm font-bold text-gray-800 leading-tight">{{ $page.props.auth.user.name }}</p>
-                            <p class="text-xs text-teal-600 font-medium">{{ getRoleName() }}</p>
-                        </div>
-                        <div class="h-10 w-10 rounded-full bg-gradient-to-r from-teal-500 to-blue-600 flex items-center justify-center text-white font-bold shadow-md">
-                            {{ $page.props.auth.user.name.charAt(0) }}
+                <div class="flex items-center justify-between w-full">
+                    <div class="flex items-center">
+                        <button @click="showingNavigationSidebar = !showingNavigationSidebar" class="p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none transition-colors">
+                            <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+                        </button>
+                        <!-- Slot for dynamic header titles -->
+                        <div class="hidden md:block ml-4">
+                            <slot name="header" />
                         </div>
                     </div>
-                    <Link :href="route('profile.edit')" class="text-sm font-medium text-gray-500 hover:text-teal-600 transition">
-                        Mi Perfil
-                    </Link>
-                    <Link :href="route('logout')" method="post" as="button" class="text-sm font-medium text-red-500 hover:text-red-700 transition">
-                        Salir
-                    </Link>
+                    
+                    <!-- Student specific topbar user actions -->
+                    <div v-if="getRoleName() === 'Estudiante'" class="flex items-center gap-2 sm:gap-4 shrink-0">
+                        <span class="hidden md:inline text-sm font-semibold text-gray-700">
+                            {{ $page.props.auth.user.name }}
+                        </span>
+                        <div class="flex items-center gap-1.5 sm:gap-2">
+                            <Link :href="route('profile.edit')" class="text-xs font-bold text-gray-600 hover:text-teal-600 bg-gray-100 hover:bg-teal-50 px-2 sm:px-3 py-1.5 rounded-lg transition-all duration-200">
+                                👤 <span class="hidden sm:inline">Mi Perfil</span>
+                            </Link>
+                            <Link :href="route('logout')" method="post" as="button" class="text-xs font-bold text-red-600 hover:text-white bg-red-50 hover:bg-red-500 px-2 sm:px-3 py-1.5 rounded-lg border border-red-100 hover:border-red-500 transition-all duration-200">
+                                🚪 <span class="hidden sm:inline">Salir</span>
+                            </Link>
+                        </div>
+                    </div>
                 </div>
             </header>
 

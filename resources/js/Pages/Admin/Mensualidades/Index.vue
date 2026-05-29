@@ -6,6 +6,7 @@ import { ref, computed } from 'vue';
 const props = defineProps<{
     mensualidades: any[];
     estudiantesActivos?: any[];
+    gestiones?: any[];
 }>();
 
 const mesesDisponibles = ['Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre'];
@@ -39,6 +40,7 @@ const searchQuery = ref('');
 const estadoFilter = ref('Pendiente'); // Muestra 'Pendientes' por defecto
 const fechaInicioFilter = ref('');
 const fechaFinFilter = ref('');
+const gestionIdFilter = ref('');
 
 const showGenerarModal = ref(false);
 const showPagarModal = ref(false);
@@ -67,6 +69,10 @@ const filteredMensualidades = computed(() => {
         });
     }
 
+    if (gestionIdFilter.value) {
+        results = results.filter(m => m.registro_internado && String(m.registro_internado.gestion_id) === String(gestionIdFilter.value));
+    }
+
     if (fechaInicioFilter.value) {
         results = results.filter(m => {
             if (!m.fecha_pago) return false;
@@ -91,6 +97,74 @@ const filteredMensualidades = computed(() => {
         m.mes.toLowerCase().includes(q)
     );
 });
+
+const exportToExcel = () => {
+    if (filteredMensualidades.value.length === 0) {
+        alert("No hay registros filtrados para exportar.");
+        return;
+    }
+    
+    // Codificación UTF-8 con BOM para soportar tildes, acentos y la letra Ñ en Excel
+    let csvContent = "\uFEFF";
+    
+    // Cabeceras
+    const headers = [
+        "Estudiante",
+        "Documento CI",
+        "Curso",
+        "Gestión Académica",
+        "Pabellón/Cama",
+        "Mes",
+        "Monto Original",
+        "Monto Total",
+        "Estado",
+        "Método de Pago",
+        "Fecha de Pago",
+        "Motivo de Anulación"
+    ];
+    csvContent += headers.join(";") + "\n";
+    
+    // Filas
+    filteredMensualidades.value.forEach(m => {
+        const estudiante = `${m.registro_internado?.estudiante?.persona?.nombre || ''} ${m.registro_internado?.estudiante?.persona?.ap_paterno || ''} ${m.registro_internado?.estudiante?.persona?.ap_materno || ''}`.trim();
+        const ci = m.registro_internado?.estudiante?.persona?.ci || '';
+        const curso = m.registro_internado?.curso?.nombre || 'Ninguno';
+        const gestion = m.registro_internado?.gestion?.nombre_gestion || '';
+        const habitacion = `${m.registro_internado?.pabellon || 'S/N'} - Cama ${m.registro_internado?.cama || 'S/N'}`;
+        const mes = m.mes || '';
+        const montoOrig = `Bs. ${m.monto}`;
+        const montoTot = `Bs. ${m.total}`;
+        const estado = m.estado || '';
+        const metodo = m.metodo_pago || 'Ninguno';
+        const fecha = m.fecha_pago || 'Ninguna';
+        const motivo = (m.motivo_anulacion || '').replace(/[\n\r;]/g, " "); // Reemplaza saltos y punto y coma
+        
+        const row = [
+            estudiante,
+            ci,
+            curso,
+            gestion,
+            habitacion,
+            mes,
+            montoOrig,
+            montoTot,
+            estado,
+            metodo,
+            fecha,
+            motivo
+        ];
+        csvContent += row.map(cell => `"${cell}"`).join(";") + "\n";
+    });
+    
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `Reporte_Mensualidades_${new Date().toISOString().substring(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+};
 
 const totalRecaudado = computed(() => {
     return props.mensualidades
@@ -274,12 +348,20 @@ const deleteMensualidad = (id: number) => {
                             <h3 class="text-sm font-bold text-gray-800 uppercase tracking-wider">Filtros de Pagos y Caja</h3>
                             <p class="text-xs text-gray-500">Administra, filtra y anula cobros escolares de la gestión activa</p>
                         </div>
-                        <button @click="showGenerarModal = true" class="bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-6 rounded-xl shadow-sm transition text-sm">
-                            + Generar Deudas del Mes
-                        </button>
+                        <div class="flex items-center gap-3">
+                            <button @click="exportToExcel" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-5 rounded-xl shadow-md transition text-sm flex items-center gap-2 transform hover:scale-[1.02]">
+                                <svg class="w-4 h-4 text-emerald-100" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-4H8V8h5v2z"/>
+                                </svg>
+                                📊 Descargar Excel
+                            </button>
+                            <button @click="showGenerarModal = true" class="bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-6 rounded-xl shadow-sm transition text-sm">
+                                + Generar Deudas del Mes
+                            </button>
+                        </div>
                     </div>
                     
-                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                         <!-- Búsqueda -->
                         <div class="relative">
                             <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Búsqueda General</label>
@@ -295,6 +377,15 @@ const deleteMensualidad = (id: number) => {
                                 <option value="Pendiente">Pendientes de Pago</option>
                                 <option value="Pagado">Pagados</option>
                                 <option value="Anulado">Anulados</option>
+                            </select>
+                        </div>
+
+                        <!-- Filtro Gestión -->
+                        <div>
+                            <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Gestión Académica</label>
+                            <select v-model="gestionIdFilter" class="w-full rounded-xl border-gray-200 shadow-sm focus:ring-teal-500 focus:border-teal-500 text-sm font-bold text-gray-700 bg-white">
+                                <option value="">Todas las Gestiones</option>
+                                <option v-for="g in gestiones" :key="g.id" :value="g.id">{{ g.nombre_gestion }}</option>
                             </select>
                         </div>
 
@@ -328,7 +419,11 @@ const deleteMensualidad = (id: number) => {
                                 <tr v-for="m in filteredMensualidades" :key="m.id" class="hover:bg-gray-50 transition">
                                     <td class="px-6 py-4 whitespace-nowrap">
                                         <div class="text-sm font-bold text-gray-900">{{ m.registro_internado?.estudiante?.persona?.nombre }} {{ m.registro_internado?.estudiante?.persona?.ap_paterno }}</div>
-                                        <div class="text-xs text-gray-500">CI: {{ m.registro_internado?.estudiante?.persona?.ci }}</div>
+                                        <div class="flex flex-wrap gap-1.5 mt-1.5">
+                                            <span class="text-[10px] text-gray-500 font-bold bg-gray-100 px-2 py-0.5 rounded-md border border-gray-200/60">CI: {{ m.registro_internado?.estudiante?.persona?.ci }}</span>
+                                            <span class="text-[10px] text-teal-700 font-extrabold bg-teal-50 px-2 py-0.5 rounded-md border border-teal-100">📅 {{ m.registro_internado?.gestion?.nombre_gestion }}</span>
+                                            <span v-if="m.registro_internado?.curso" class="text-[10px] text-indigo-700 font-extrabold bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100">🎓 {{ m.registro_internado?.curso?.nombre }}</span>
+                                        </div>
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                                         {{ m.mes }}
