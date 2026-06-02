@@ -3,11 +3,19 @@ import { Head, useForm, router } from '@inertiajs/vue3';
 import { ref, computed, onMounted, watch } from 'vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 
+// Importación de los componentes modulares hijos
+import UserTable from './Partials/UserTable.vue';
+import UserModal from './Partials/UserModal.vue';
+import PasswordModal from './Partials/PasswordModal.vue';
+import DeleteConfirmModal from './Partials/DeleteConfirmModal.vue';
+
+// Propiedades recibidas desde el servidor a través de Inertia
 const props = defineProps<{
     users: any[];
     roles: any[];
 }>();
 
+// Estados reactivos de control para ventanas modales y vistas
 const showModal = ref(false);
 const isEditing = ref(false);
 const isReadOnlyMode = ref(true);
@@ -16,7 +24,7 @@ const userForPassword = ref<any>(null);
 const showViewModal = ref(false);
 const selectedUser = ref<any>(null);
 
-// Filtros de búsqueda
+// Filtros reactivos de búsqueda avanzada en el panel superior
 const filter = ref({
     texto: '',
     rol_id: '',
@@ -24,8 +32,10 @@ const filter = ref({
     sexo: ''
 });
 
+// Interruptor para la carga completa optimizada de la base de datos
 const cargarTodosSwitch = ref(false);
 
+// Función que realiza la petición HTTP con los filtros activos al servidor
 const performServerSearch = () => {
     router.get(route('users.index'), {
         search: filter.value.texto,
@@ -40,6 +50,7 @@ const performServerSearch = () => {
     });
 };
 
+// Observadores para reaccionar al cambio de filtros y recargar los datos
 watch(cargarTodosSwitch, () => {
     performServerSearch();
 });
@@ -52,6 +63,7 @@ watch(() => [
     performServerSearch();
 });
 
+// Hook inicial para parsear parámetros de la URL al cargar la página
 onMounted(() => {
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('cargar_todos') === '1') {
@@ -62,21 +74,10 @@ onMounted(() => {
     }
 });
 
+// Colección de IDs seleccionados para acciones masivas (Aprobación)
 const selectedUsers = ref<number[]>([]);
-const checkAll = computed({
-    get() {
-        const pendingUsers = filteredUsers.value.filter(u => u.estado_cuenta === 'Pendiente');
-        return pendingUsers.length > 0 && selectedUsers.value.length === pendingUsers.length;
-    },
-    set(val) {
-        if (val) {
-            selectedUsers.value = filteredUsers.value.filter(u => u.estado_cuenta === 'Pendiente').map(u => u.id);
-        } else {
-            selectedUsers.value = [];
-        }
-    }
-});
 
+// Formulario de Inertia para la creación y edición (CRUD) de usuarios
 const form = useForm({
     id: null as number | null,
     ci: '',
@@ -90,46 +91,25 @@ const form = useForm({
     estado_cuenta: ''
 });
 
+// Listado de usuarios procesado reactivamente
 const filteredUsers = computed(() => {
-    return props.users.filter(user => {
-        // Texto general (Nombre, CI, Celular)
-        let matchesText = true;
-        if (filter.value.texto) {
-            const q = filter.value.texto.toLowerCase();
-            const nombre = `${user.persona?.nombre} ${user.persona?.ap_paterno} ${user.persona?.ap_materno}`.toLowerCase();
-            const ci = user.persona?.ci?.toLowerCase() || '';
-            const celular = user.persona?.celular?.toLowerCase() || '';
-            matchesText = nombre.includes(q) || ci.includes(q) || celular.includes(q);
-        }
-
-        let matchesRole = filter.value.rol_id === '' || String(user.rol_id) === String(filter.value.rol_id);
-        
-        let matchesEstado = true;
-        if (filter.value.estado_cuenta !== '') {
-            matchesEstado = user.estado_cuenta === filter.value.estado_cuenta;
-        }
-        
-        let matchesSexo = true;
-        if (filter.value.sexo) {
-            matchesSexo = user.persona?.sexo === filter.value.sexo;
-        }
-
-        return matchesText && matchesRole && matchesEstado && matchesSexo;
-    });
+    return props.users;
 });
 
+// Métricas informativas de la vista (Cuentas de hombres, mujeres y pendientes)
 const countHombres = computed(() => {
-    return filteredUsers.value.filter(u => u.persona?.sexo === 'M').length;
+    return props.users.filter(u => u.persona?.sexo === 'M').length;
 });
 
 const countMujeres = computed(() => {
-    return filteredUsers.value.filter(u => u.persona?.sexo === 'F').length;
+    return props.users.filter(u => u.persona?.sexo === 'F').length;
 });
 
 const countPendientes = computed(() => {
     return props.users.filter(u => u.estado_cuenta === 'Pendiente').length;
 });
 
+// Abre el modal para registrar un nuevo usuario administrativo
 const openCreateModal = () => {
     isEditing.value = false;
     isReadOnlyMode.value = false;
@@ -137,6 +117,7 @@ const openCreateModal = () => {
     showModal.value = true;
 };
 
+// Abre el modal para editar datos existentes de una cuenta
 const openEditModal = (user: any) => {
     isEditing.value = true;
     isReadOnlyMode.value = false;
@@ -157,11 +138,13 @@ const openEditModal = (user: any) => {
     showModal.value = true;
 };
 
+// Cierra el modal CRUD y limpia errores
 const closeModal = () => {
     showModal.value = false;
     form.reset();
 };
 
+// Procesa el guardado del formulario (Creación o Actualización) con confirmación previa
 const submitForm = () => {
     if (!confirm('¿Está seguro de que desea guardar los cambios?')) {
         return;
@@ -177,8 +160,9 @@ const submitForm = () => {
     }
 };
 
+// Exporta la lista filtrada de usuarios a formato CSV compatible con Excel
 const exportToExcel = () => {
-    const list = filteredUsers.value;
+    const list = props.users;
     if (list.length === 0) {
         alert('No hay usuarios para exportar con los filtros actuales.');
         return;
@@ -227,23 +211,26 @@ const exportToExcel = () => {
     document.body.removeChild(link);
 };
 
+// Abre el modal visor con la ficha técnica detallada del usuario
 const openViewModal = (user: any) => {
     selectedUser.value = user;
     showViewModal.value = true;
 };
 
+// Cierra el visor de detalles del usuario
 const closeViewModal = () => {
     showViewModal.value = false;
     selectedUser.value = null;
 };
 
-// Eliminar con Contraseña
+// Estados reactivos de control para el modal de eliminación con contraseña
 const showDeleteModal = ref(false);
 const userIdToDelete = ref<number | null>(null);
 const deletePassword = ref('');
 const deleteError = ref('');
 const deleteFormProcessing = ref(false);
 
+// Abre el modal para confirmar la eliminación de un usuario ingresando contraseña
 const confirmDeleteUser = (id: number) => {
     userIdToDelete.value = id;
     deletePassword.value = '';
@@ -251,6 +238,7 @@ const confirmDeleteUser = (id: number) => {
     showDeleteModal.value = true;
 };
 
+// Procesa el envío seguro para la eliminación física del usuario
 const submitDeleteUser = () => {
     if (!deletePassword.value) {
         deleteError.value = 'Debe introducir su contraseña para continuar.';
@@ -279,17 +267,20 @@ const submitDeleteUser = () => {
     });
 };
 
+// Formulario reactivo para la actualización de contraseñas de cuentas
 const formPassword = useForm({
     password: '',
     password_confirmation: ''
 });
 
+// Abre el modal para restablecer la clave de seguridad del usuario
 const openPasswordModal = (user: any) => {
     userForPassword.value = user;
     formPassword.reset();
     showPasswordModal.value = true;
 };
 
+// Envía la solicitud de restablecimiento de contraseña al servidor
 const submitPassword = () => {
     formPassword.post(route('users.password', userForPassword.value.id), {
         onSuccess: () => {
@@ -299,18 +290,21 @@ const submitPassword = () => {
     });
 };
 
+// Registra la inhabilitación/rechazo de un usuario
 const rechazarUsuario = (id: number) => {
     if (confirm('¿Estás seguro de que deseas rechazar la solicitud de acceso de este usuario?')) {
         router.put(route('users.rechazar', id));
     }
 };
 
+// Aprueba formalmente la cuenta de forma individual
 const aprobarCuentaIndividual = (id: number) => {
     if (confirm('¿Estás seguro de aprobar la cuenta de este usuario?')) {
         router.put(route('users.aprobar', id));
     }
 };
 
+// Procesa la aprobación de múltiples cuentas seleccionadas simultáneamente
 const aprobarMasivo = () => {
     if (confirm(`¿Aprobar las ${selectedUsers.value.length} cuentas de usuario seleccionadas?`)) {
         router.post(route('users.aprobar.masivo'), { user_ids: selectedUsers.value }, {
@@ -336,16 +330,14 @@ const aprobarMasivo = () => {
         <div class="py-8 bg-gray-50 min-h-screen">
             <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
                 
-
-
-                <!-- Barra de Super Filtros -->
+                <!-- Barra de Super Filtros y Búsquedas -->
                 <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-6">
                     <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
                         <div>
                             <div class="flex items-center gap-2">
                                 <h3 class="text-lg font-bold text-gray-800">Filtros y Búsqueda</h3>
                                 <span class="px-2.5 py-0.5 rounded-full text-xs font-black bg-slate-100 text-slate-800 border border-slate-200 uppercase tracking-wide">
-                                    Filtrados: {{ filteredUsers.length }}
+                                    Filtrados: {{ props.users.length }}
                                 </span>
                             </div>
                             <p class="text-xs text-gray-500">Busca y administra accesos de Superadministradores, Encargadas y Estudiantes habilitados.</p>
@@ -404,12 +396,12 @@ const aprobarMasivo = () => {
                         </div>
                     </div>
 
-                    <!-- Inline performance switch helper -->
+                    <!-- Asistente de rendimiento (Toggle de Carga Completa) -->
                     <div class="mt-5 pt-4 border-t border-gray-150 flex items-center justify-between gap-4 flex-wrap">
                         <div class="flex items-center gap-2">
-                            <span class="inline-block h-2.5 w-2.5 rounded-full bg-amber-500 animate-pulse" v-if="users.length === 0"></span>
+                            <span class="inline-block h-2.5 w-2.5 rounded-full bg-amber-500 animate-pulse" v-if="props.users.length === 0"></span>
                             <span class="text-xs text-gray-500 font-bold">
-                                {{ users.length === 0 ? 'Carga optimizada: listado oculto inicialmente para acelerar el sistema.' : 'Listado dinámico cargado exitosamente.' }}
+                                {{ props.users.length === 0 ? 'Carga optimizada: listado oculto inicialmente para acelerar el sistema.' : 'Listado dinámico cargado exitosamente.' }}
                             </span>
                         </div>
                         <label class="inline-flex items-center gap-2.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 px-4 py-2 rounded-xl cursor-pointer transition select-none">
@@ -420,9 +412,9 @@ const aprobarMasivo = () => {
 
                 </div>
 
-                <!-- Tabla de Resultados -->
+                <!-- Tabla de Resultados Principal (Modularizada) -->
                 <div class="bg-white rounded-2xl shadow-sm overflow-hidden border border-gray-100">
-                    <div v-if="users.length === 0" class="py-20 px-8 text-center max-w-lg mx-auto">
+                    <div v-if="props.users.length === 0" class="py-20 px-8 text-center max-w-lg mx-auto">
                         <div class="h-16 w-16 rounded-full bg-teal-50 text-teal-600 flex items-center justify-center mx-auto mb-5 text-3xl shadow-sm">
                             👤
                         </div>
@@ -432,223 +424,32 @@ const aprobarMasivo = () => {
                             Cargar Todo el Listado
                         </button>
                     </div>
-                    <div v-else class="overflow-x-auto">
-                        <table class="min-w-full divide-y divide-gray-200">
-                            <thead class="bg-gray-50">
-                                <tr>
-                                    <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider w-10">
-                                        <input type="checkbox" v-model="checkAll" class="rounded border-gray-300 text-teal-600 focus:ring-teal-500">
-                                    </th>
-                                    <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Usuario / Persona</th>
-                                    <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Contacto</th>
-                                    <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Rol / Estado</th>
-                                    <th class="px-6 py-4 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Acciones</th>
-                                </tr>
-                            </thead>
-                            <tbody class="bg-white divide-y divide-gray-200">
-                                <tr v-for="user in filteredUsers" :key="user.id" class="hover:bg-gray-50 transition" :class="{'bg-teal-50/40': selectedUsers.includes(user.id)}">
-                                    <td class="px-6 py-4 whitespace-nowrap">
-                                        <input v-if="user.estado_cuenta === 'Pendiente'" type="checkbox" :value="user.id" v-model="selectedUsers" class="rounded border-gray-300 text-teal-600 focus:ring-teal-500">
-                                    </td>
-                                    <td class="px-6 py-4 whitespace-nowrap">
-                                        <div class="flex items-center">
-                                            <div class="flex-shrink-0 h-10 w-10">
-                                                <img v-if="user.persona?.estudiante?.ruta_foto" :src="user.persona.estudiante.ruta_foto" class="h-10 w-10 rounded-full object-cover border border-gray-200 shadow-sm animate-fade-in">
-                                                <div v-else :class="[
-                                                    user.rol?.nombre === 'Superadmin' ? 'bg-indigo-100 text-indigo-800 border-indigo-200' :
-                                                    user.rol?.nombre === 'Encargada' ? 'bg-blue-100 text-blue-800 border-blue-200' :
-                                                    'bg-teal-100 text-teal-800 border-teal-200'
-                                                ]" class="h-10 w-10 rounded-full border flex items-center justify-center font-bold shadow-sm">
-                                                    {{ user.persona?.nombre?.charAt(0) || user.name.charAt(0) }}
-                                                </div>
-                                            </div>
-                                            <div class="ml-4">
-                                                <div class="text-sm font-bold text-gray-900">{{ user.persona?.nombre || user.name }} {{ user.persona?.ap_paterno || '' }} {{ user.persona?.ap_materno || '' }}</div>
-                                                <div class="text-xs text-gray-500">CI: {{ user.persona?.ci || 'S/CI' }}</div>
-                                            </div>
-                                        </div>
-                                    </td>
-                                    <td class="px-6 py-4 whitespace-nowrap">
-                                        <div class="text-sm text-gray-900">Cel: {{ user.persona?.celular || 'S/N' }}</div>
-                                        <div class="text-xs text-gray-500">{{ user.email }}</div>
-                                    </td>
-                                    <td class="px-6 py-4 whitespace-nowrap">
-                                        <div class="flex flex-col space-y-1">
-                                            <span :class="[
-                                                user.rol?.nombre === 'Superadmin' ? 'bg-indigo-100 text-indigo-800 border-indigo-200' :
-                                                user.rol?.nombre === 'Encargada' ? 'bg-blue-100 text-blue-800 border-blue-200' :
-                                                'bg-teal-100 text-teal-800 border-teal-200'
-                                            ]" class="px-2.5 py-0.5 inline-flex text-[10px] leading-4 font-black rounded-full border self-start uppercase tracking-wide">
-                                                {{ user.rol?.nombre || 'Sin Rol' }}
-                                            </span>
-                                            
-                                            <span v-if="user.estado_cuenta === 'Pendiente'" class="px-2 py-0.5 inline-flex text-[10px] leading-4 font-bold rounded-full bg-yellow-50 text-yellow-700 border border-yellow-200 self-start">
-                                                ⏳ Pendiente Aprobación
-                                            </span>
-                                            <span v-else-if="user.estado_cuenta === 'Rechazado'" class="px-2 py-0.5 inline-flex text-[10px] leading-4 font-bold rounded-full bg-red-50 text-red-700 border border-red-200 self-start">
-                                                ❌ Solicitud Rechazada
-                                            </span>
-                                            <span v-else class="px-2 py-0.5 inline-flex text-[10px] leading-4 font-bold rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 self-start">
-                                                ✅ Cuenta Activa
-                                            </span>
-                                        </div>
-                                    </td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium flex justify-end items-center gap-3">
-                                        
-                                        <!-- Ficha rápida de usuario -->
-                                        <button @click="openViewModal(user)" class="text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 p-2 rounded-xl transition duration-150" title="Ver Detalles de la Cuenta">
-                                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
-                                        </button>
-
-                                        <!-- Botones para solicitudes pendientes de Estudiantes -->
-                                        <template v-if="user.estado_cuenta === 'Pendiente'">
-                                            <button @click="aprobarCuentaIndividual(user.id)" class="text-emerald-600 hover:text-white bg-emerald-50 hover:bg-emerald-600 p-2 rounded-xl border border-emerald-100 transition duration-150" title="Aprobar Solicitud de Acceso">
-                                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
-                                            </button>
-                                            <button @click="rechazarUsuario(user.id)" class="text-red-600 hover:text-white bg-red-50 hover:bg-red-600 p-2 rounded-xl border border-red-100 transition duration-150" title="Rechazar Solicitud de Acceso">
-                                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-                                            </button>
-                                        </template>
-
-                                        <!-- Controles estándar para cuentas de acceso activas -->
-                                        <template v-if="user.estado_cuenta !== 'Rechazado'">
-                                            <button @click="openPasswordModal(user)" class="text-indigo-600 hover:text-white bg-indigo-50 hover:bg-indigo-600 p-2 rounded-xl border border-indigo-100 transition duration-150" title="Blanquear o Cambiar Contraseña">
-                                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path></svg>
-                                            </button>
-                                            <button @click="openEditModal(user)" class="text-teal-600 hover:text-white bg-teal-50 hover:bg-teal-600 p-2 rounded-xl border border-teal-100 transition duration-150" title="Modificar Datos Básicos">
-                                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
-                                            </button>
-                                        </template>
-                                        
-                                        <!-- Eliminar cuenta del sistema -->
-                                        <button @click="confirmDeleteUser(user.id)" class="text-rose-600 hover:text-white bg-rose-50 hover:bg-rose-600 p-2 rounded-xl border border-rose-100 transition duration-150" title="Eliminar Acceso al Sistema">
-                                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-                                        </button>
-                                    </td>
-                                </tr>
-                                <tr v-if="filteredUsers.length === 0">
-                                    <td colspan="5" class="px-6 py-12 text-center text-gray-500">
-                                        <span class="text-4xl block mb-2">🔍</span> No se encontraron cuentas de usuario con los criterios seleccionados.
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
+                    <div v-else>
+                        <UserTable 
+                            :users="users"
+                            :filtered-users="filteredUsers"
+                            v-model:selected-users="selectedUsers"
+                            @view="openViewModal"
+                            @approve="aprobarCuentaIndividual"
+                            @reject="rechazarUsuario"
+                            @password="openPasswordModal"
+                            @edit="openEditModal"
+                            @delete="confirmDeleteUser"
+                        />
                     </div>
                 </div>
 
-                <!-- Modal CRUD de Usuario -->
-                <div v-if="showModal" class="fixed z-50 inset-0 overflow-y-auto">
-                    <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-                        <div class="fixed inset-0 transition-opacity backdrop-blur-sm bg-gray-900/50" @click="closeModal"></div>
-                        <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
-                        <div class="inline-block align-bottom bg-white rounded-2xl text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full">
+                <!-- Modal CRUD de Usuario (Modularizado) -->
+                <UserModal 
+                    :show-modal="showModal"
+                    :is-editing="isEditing"
+                    :roles="roles"
+                    :form="form"
+                    @close="closeModal"
+                    @submit="submitForm"
+                />
 
-                            <form @submit.prevent="submitForm">
-                                <div class="bg-white px-6 pt-6 pb-4 sm:p-6">
-                                    <h3 class="text-xl leading-6 font-black text-gray-900 mb-6 border-b pb-4 flex items-center gap-2">
-                                        <span>⚙️</span> {{ isEditing ? 'Editar Datos de Acceso' : 'Nuevo Usuario Administrativo/Encargado' }}
-                                    </h3>
-
-                                    <!-- Alerta de Errores de Validación -->
-                                    <div v-if="Object.keys(form.errors).length > 0" class="mb-6 bg-rose-50 border-l-4 border-rose-500 p-4 rounded-r-xl">
-                                        <div class="flex">
-                                            <div class="flex-shrink-0">
-                                                <svg class="h-5 w-5 text-rose-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
-                                            </div>
-                                            <div class="ml-3">
-                                                <h3 class="text-sm font-semibold text-rose-800">Hay errores de validación en el formulario:</h3>
-                                                <ul class="mt-1 list-disc list-inside text-xs text-rose-700">
-                                                    <li v-for="(err, key) in form.errors" :key="key">{{ err }}</li>
-                                                </ul>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                                        <!-- DATOS PERSONALES -->
-                                        <div class="sm:col-span-2">
-                                            <h4 class="font-bold text-teal-700 mb-1 uppercase text-xs tracking-wider border-b pb-1">1. Información Personal</h4>
-                                        </div>
-
-                                        <div>
-                                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wide">Carnet de Identidad (CI)</label>
-                                            <input v-model="form.ci" :disabled="isEditing" type="text" placeholder="Ej. 1234567" class="mt-1 block w-full border-gray-300 rounded-lg text-sm shadow-sm focus:ring-teal-500 focus:border-teal-500">
-                                            <p v-if="form.errors.ci" class="text-rose-500 text-xs mt-1 font-semibold">{{ form.errors.ci }}</p>
-                                        </div>
-                                        
-                                        <div>
-                                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wide">Nombres</label>
-                                            <input v-model="form.nombre" type="text" placeholder="Nombres" class="mt-1 block w-full border-gray-300 rounded-lg text-sm shadow-sm focus:ring-teal-500 focus:border-teal-500">
-                                            <p v-if="form.errors.nombre" class="text-rose-500 text-xs mt-1 font-semibold">{{ form.errors.nombre }}</p>
-                                        </div>
-
-                                        <div>
-                                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wide">Apellido Paterno</label>
-                                            <input v-model="form.ap_paterno" type="text" placeholder="Paterno" class="mt-1 block w-full border-gray-300 rounded-lg text-sm shadow-sm focus:ring-teal-500 focus:border-teal-500">
-                                            <p v-if="form.errors.ap_paterno" class="text-rose-500 text-xs mt-1 font-semibold">{{ form.errors.ap_paterno }}</p>
-                                        </div>
-
-                                        <div>
-                                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wide">Apellido Materno</label>
-                                            <input v-model="form.ap_materno" type="text" placeholder="Materno" class="mt-1 block w-full border-gray-300 rounded-lg text-sm shadow-sm focus:ring-teal-500 focus:border-teal-500">
-                                        </div>
-
-                                        <div>
-                                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wide">Celular</label>
-                                            <input v-model="form.celular" type="text" placeholder="Celular o Teléfono" class="mt-1 block w-full border-gray-300 rounded-lg text-sm shadow-sm focus:ring-teal-500 focus:border-teal-500">
-                                        </div>
-
-                                        <div>
-                                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wide">Género (Sexo)</label>
-                                            <select v-model="form.sexo" class="mt-1 block w-full border-gray-300 rounded-lg text-sm shadow-sm focus:ring-teal-500 focus:border-teal-500">
-                                                <option value="">Seleccione...</option>
-                                                <option value="M">Masculino</option>
-                                                <option value="F">Femenino</option>
-                                            </select>
-                                        </div>
-
-                                        <!-- ACCESO Y ROLES -->
-                                        <div class="sm:col-span-2 mt-2">
-                                            <h4 class="font-bold text-teal-700 mb-1 uppercase text-xs tracking-wider border-b pb-1">2. Credenciales y Permisos de Sistema</h4>
-                                        </div>
-
-                                        <div>
-                                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wide">Correo Electrónico (Opcional)</label>
-                                            <input v-model="form.email" type="email" placeholder="usuario@internado.org (opcional)" class="mt-1 block w-full border-gray-300 rounded-lg text-sm shadow-sm focus:ring-teal-500 focus:border-teal-500">
-                                            <p v-if="form.errors.email" class="text-rose-500 text-xs mt-1 font-semibold">{{ form.errors.email }}</p>
-                                        </div>
-
-                                        <div>
-                                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wide">Rol Asignado</label>
-                                            <select v-model="form.rol_id" class="mt-1 block w-full border-gray-300 rounded-lg text-sm shadow-sm focus:ring-teal-500 focus:border-teal-500 bg-blue-50/50 border-blue-200">
-                                                <option disabled value="">Seleccionar Rol...</option>
-                                                <option v-for="rol in roles" :key="rol.id" :value="rol.id">{{ rol.nombre }}</option>
-                                            </select>
-                                            <p v-if="form.errors.rol_id" class="text-rose-500 text-xs mt-1 font-semibold">{{ form.errors.rol_id }}</p>
-                                        </div>
-
-                                        <div v-if="!isEditing" class="sm:col-span-2 bg-slate-50 p-4 rounded-xl border border-slate-200">
-                                            <p class="text-xs text-slate-600 font-semibold flex items-center gap-1.5">
-                                                <span>💡</span> Para cuentas nuevas, la contraseña se establecerá por defecto igual al <strong>Número de Cédula de Identidad (CI)</strong> ingresado. El usuario podrá cambiarla al acceder a su perfil.
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div class="bg-gray-50 px-6 py-4 sm:flex sm:flex-row-reverse border-t gap-2">
-                                    <button type="submit" :disabled="form.processing" class="w-full inline-flex justify-center rounded-xl border border-transparent shadow-sm px-5 py-2.5 bg-teal-600 hover:bg-teal-700 text-sm font-bold text-white transition focus:outline-none sm:ml-3 sm:w-auto">
-                                        {{ form.processing ? 'Guardando...' : 'Guardar Usuario' }}
-                                    </button>
-                                    <button type="button" @click="closeModal" class="mt-3 w-full inline-flex justify-center rounded-xl border border-gray-300 shadow-sm px-5 py-2.5 bg-white hover:bg-gray-50 text-sm font-bold text-gray-700 transition focus:outline-none sm:mt-0 sm:w-auto">
-                                        Cancelar
-                                    </button>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Modal Ver Detalle (Ficha Resumen) -->
+                <!-- Modal Ver Detalle / Ficha Técnica Resumen -->
                 <div v-if="showViewModal" class="fixed z-50 inset-0 overflow-y-auto">
                     <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
                         <div class="fixed inset-0 transition-opacity backdrop-blur-sm bg-gray-900/50" @click="closeViewModal"></div>
@@ -716,86 +517,24 @@ const aprobarMasivo = () => {
                     </div>
                 </div>
 
-                <!-- Modal Cambiar Contraseña -->
-                <div v-if="showPasswordModal" class="fixed z-50 inset-0 overflow-y-auto">
-                    <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-                        <div class="fixed inset-0 transition-opacity backdrop-blur-sm bg-gray-900/50" @click="showPasswordModal = false"></div>
-                        <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
-                        <div class="inline-block align-bottom bg-white rounded-2xl text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-md sm:w-full">
-                            <form @submit.prevent="submitPassword">
-                                <div class="bg-white px-6 pt-6 pb-4">
-                                    <h3 class="text-lg leading-6 font-black text-gray-900 mb-4 border-b pb-3 flex items-center gap-2">
-                                        <span>🔑</span> Restablecer Contraseña
-                                    </h3>
-                                    
-                                    <div class="space-y-4">
-                                        <p class="text-xs text-gray-500">
-                                            Estás cambiando las credenciales del usuario: <br>
-                                            <strong class="text-slate-700 font-bold text-sm">{{ userForPassword?.persona?.nombre || userForPassword?.name }} {{ userForPassword?.persona?.ap_paterno || '' }}</strong>
-                                        </p>
+                <!-- Modal Cambiar Contraseña (Modularizado) -->
+                <PasswordModal 
+                    :show-password-modal="showPasswordModal"
+                    :user-for-password="userForPassword"
+                    :form-password="formPassword"
+                    @close="showPasswordModal = false"
+                    @submit="submitPassword"
+                />
 
-                                        <div>
-                                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wide">Nueva Contraseña (mínimo 8 caracteres)</label>
-                                            <input v-model="formPassword.password" type="password" required class="mt-1 block w-full border-gray-300 rounded-lg text-sm focus:ring-teal-500 focus:border-teal-500 shadow-sm">
-                                            <p v-if="formPassword.errors.password" class="text-red-500 text-xs mt-1">{{ formPassword.errors.password }}</p>
-                                        </div>
-
-                                        <div>
-                                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wide">Confirmar Nueva Contraseña</label>
-                                            <input v-model="formPassword.password_confirmation" type="password" required class="mt-1 block w-full border-gray-300 rounded-lg text-sm focus:ring-teal-500 focus:border-teal-500 shadow-sm">
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="bg-gray-50 px-6 py-4 sm:flex sm:flex-row-reverse border-t gap-2">
-                                    <button type="submit" :disabled="formPassword.processing" class="w-full inline-flex justify-center rounded-xl border border-transparent shadow-sm px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-sm font-bold text-white transition sm:ml-3 sm:w-auto">
-                                        Actualizar Contraseña
-                                    </button>
-                                    <button type="button" @click="showPasswordModal = false" class="mt-3 w-full inline-flex justify-center rounded-xl border border-gray-300 shadow-sm px-5 py-2.5 bg-white hover:bg-gray-50 text-sm font-bold text-gray-700 transition sm:mt-0 sm:w-auto">
-                                        Cancelar
-                                    </button>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Modal Eliminar Cuenta con Contraseña de Seguridad -->
-                <div v-if="showDeleteModal" class="fixed z-50 inset-0 overflow-y-auto">
-                    <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-                        <div class="fixed inset-0 transition-opacity backdrop-blur-sm bg-gray-900/50" @click="showDeleteModal = false"></div>
-                        <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
-                        <div class="inline-block align-bottom bg-white rounded-2xl text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-md sm:w-full">
-                            <div class="bg-white px-6 pt-6 pb-4">
-                                <h3 class="text-lg leading-6 font-black text-rose-700 mb-4 border-b pb-3 flex items-center gap-2">
-                                    <span>⚠️</span> Confirmar Eliminación de Acceso
-                                </h3>
-                                
-                                <div class="space-y-4">
-                                    <p class="text-xs text-gray-600 font-semibold leading-relaxed">
-                                        ¿Está completamente seguro de eliminar esta cuenta de acceso? Esta acción removerá el login del usuario del sistema.
-                                    </p>
-                                    <blockquote class="border-l-4 border-rose-500 bg-rose-50 p-2.5 rounded-r-lg text-xs text-rose-800 font-bold">
-                                        Nota: Si la cuenta pertenece a un estudiante, el expediente físico y el historial de mensualidades permanecerán intactos en la sección de "Estudiantes".
-                                    </blockquote>
-
-                                    <div>
-                                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wide">Introduce tu Contraseña de Administrador</label>
-                                        <input v-model="deletePassword" type="password" required placeholder="Contraseña de Superadmin" class="mt-1 block w-full border-gray-300 rounded-lg text-sm focus:ring-rose-500 focus:border-rose-500 shadow-sm">
-                                        <p v-if="deleteError" class="text-rose-600 text-xs mt-1.5 font-bold">{{ deleteError }}</p>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="bg-slate-50 px-6 py-4 sm:flex sm:flex-row-reverse border-t gap-2">
-                                <button type="button" @click="submitDeleteUser" :disabled="deleteFormProcessing" class="w-full inline-flex justify-center rounded-xl border border-transparent shadow-sm px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-sm font-bold text-white transition sm:ml-3 sm:w-auto">
-                                    {{ deleteFormProcessing ? 'Eliminando...' : 'Eliminar Acceso' }}
-                                </button>
-                                <button type="button" @click="showDeleteModal = false" class="mt-3 w-full inline-flex justify-center rounded-xl border border-gray-300 shadow-sm px-5 py-2.5 bg-white hover:bg-gray-50 text-sm font-bold text-gray-700 transition sm:mt-0 sm:w-auto">
-                                    Cancelar
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                <!-- Modal Eliminar Cuenta con Contraseña de Seguridad (Modularizado) -->
+                <DeleteConfirmModal 
+                    :show-delete-modal="showDeleteModal"
+                    v-model:delete-password="deletePassword"
+                    :delete-error="deleteError"
+                    :delete-form-processing="deleteFormProcessing"
+                    @close="showDeleteModal = false"
+                    @submit="submitDeleteUser"
+                />
 
             </div>
         </div>

@@ -3,14 +3,24 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, useForm, router } from '@inertiajs/vue3';
 import { ref, computed, watch, onMounted } from 'vue';
 
+// Importación de los componentes modulares hijos
+import MensualidadesTable from './Partials/MensualidadesTable.vue';
+import GenerarMasivoModal from './Partials/GenerarMasivoModal.vue';
+import CobrarModal from './Partials/CobrarModal.vue';
+import AnularModal from './Partials/AnularModal.vue';
+import VerAnuladoModal from './Partials/VerAnuladoModal.vue';
+
+// Propiedades recibidas desde el servidor a través de Inertia
 const props = defineProps<{
     mensualidades: any[];
     estudiantesActivos?: any[];
     gestiones?: any[];
 }>();
 
+// Lista estática de meses escolares para cobro regular
 const mesesDisponibles = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
+// Formulario de Inertia para la generación masiva de deudas/cobros
 const formGenerar = useForm({
     concepto_tipo: 'mes', // 'mes' o 'personalizado'
     mes: 'Febrero',
@@ -19,48 +29,18 @@ const formGenerar = useForm({
     registro_internado_ids: [] as number[]
 });
 
-const searchStudentInModal = ref('');
-
-const filteredEstudiantesActivos = computed(() => {
-    const list = props.estudiantesActivos || [];
-    if (!searchStudentInModal.value) return list;
-    const q = searchStudentInModal.value.toLowerCase();
-    return list.filter(est => 
-        est.estudiante?.persona?.nombre.toLowerCase().includes(q) ||
-        est.estudiante?.persona?.ap_paterno.toLowerCase().includes(q) ||
-        (est.estudiante?.persona?.ap_materno && est.estudiante.persona.ap_materno.toLowerCase().includes(q)) ||
-        est.estudiante?.persona?.ci.includes(q)
-    );
-});
-
-const seleccionarTodos = computed({
-    get() {
-        const list = filteredEstudiantesActivos.value;
-        return list.length > 0 && list.every(e => formGenerar.registro_internado_ids.includes(e.id));
-    },
-    set(val) {
-        const listIds = filteredEstudiantesActivos.value.map(e => e.id);
-        if (val) {
-            listIds.forEach(id => {
-                if (!formGenerar.registro_internado_ids.includes(id)) {
-                    formGenerar.registro_internado_ids.push(id);
-                }
-            });
-        } else {
-            formGenerar.registro_internado_ids = formGenerar.registro_internado_ids.filter(id => !listIds.includes(id));
-        }
-    }
-});
-
+// Formulario de Inertia para procesar y consolidar pagos individuales
 const formPagar = useForm({
     estado: 'Pagado',
     metodo_pago: 'Efectivo',
     fecha_pago: new Date().toISOString().substring(0, 10)
 });
 
+// Filtros reactivos de búsqueda en la sección de caja
 const searchQuery = ref('');
 const cargarTodosSwitch = ref(false);
 
+// Función que realiza la petición HTTP con los filtros de caja activos al servidor
 const performServerSearch = () => {
     router.get(route('mensualidades.index'), {
         search: searchQuery.value,
@@ -74,6 +54,7 @@ const performServerSearch = () => {
     });
 };
 
+// Observadores para reaccionar al cambio de filtros y recargar los datos
 watch(cargarTodosSwitch, () => {
     performServerSearch();
 });
@@ -85,6 +66,7 @@ watch(() => [
     performServerSearch();
 });
 
+// Hook inicial para parsear parámetros de la URL al cargar la página
 onMounted(() => {
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('cargar_todos') === '1') {
@@ -95,26 +77,31 @@ onMounted(() => {
     }
 });
 
+// Filtros avanzados del panel de control de mensualidades
 const estadoFilter = ref('Pendiente'); // Muestra 'Pendientes' por defecto
 const fechaInicioFilter = ref('');
 const fechaFinFilter = ref('');
 const gestionIdFilter = ref('');
 
+// Estados de control para la visibilidad de los modales hijos
 const showGenerarModal = ref(false);
 const showPagarModal = ref(false);
 const showAnularModal = ref(false);
 const showViewAnuladoModal = ref(false);
 
+// Registro seleccionado para operaciones específicas (Cobros, Anulaciones, Auditorías)
 const mensualidadSeleccionada = ref<any>(null);
 const mensualidadAAnular = ref<any>(null);
 const mensualidadVerAnulada = ref<any>(null);
 
+// Formulario de Inertia para registrar motivos de anulación y confirmar credenciales
 const formAnular = useForm({
     estado: 'Anulado',
     motivo_anulacion: '',
     password: ''
 });
 
+// Procesa el filtrado en el cliente para el buscador y las fechas adicionales
 const filteredMensualidades = computed(() => {
     let results = props.mensualidades;
     
@@ -134,7 +121,6 @@ const filteredMensualidades = computed(() => {
     if (fechaInicioFilter.value) {
         results = results.filter(m => {
             if (!m.fecha_pago) return false;
-            // Solo compara la fecha
             return m.fecha_pago >= fechaInicioFilter.value;
         });
     }
@@ -156,16 +142,15 @@ const filteredMensualidades = computed(() => {
     );
 });
 
+// Exporta toda la planilla filtrada actual a CSV con formato compatible Excel y soporte UTF-8
 const exportToExcel = () => {
     if (filteredMensualidades.value.length === 0) {
         alert("No hay registros filtrados para exportar.");
         return;
     }
     
-    // Codificación UTF-8 con BOM para soportar tildes, acentos y la letra Ñ en Excel
     let csvContent = "\uFEFF";
     
-    // Cabeceras
     const headers = [
         "Estudiante",
         "Documento CI",
@@ -182,7 +167,6 @@ const exportToExcel = () => {
     ];
     csvContent += headers.join(";") + "\n";
     
-    // Filas
     filteredMensualidades.value.forEach(m => {
         const estudiante = `${m.registro_internado?.estudiante?.persona?.nombre || ''} ${m.registro_internado?.estudiante?.persona?.ap_paterno || ''} ${m.registro_internado?.estudiante?.persona?.ap_materno || ''}`.trim();
         const ci = m.registro_internado?.estudiante?.persona?.ci || '';
@@ -195,7 +179,7 @@ const exportToExcel = () => {
         const estado = m.estado || '';
         const metodo = m.metodo_pago || 'Ninguno';
         const fecha = m.fecha_pago || 'Ninguna';
-        const motivo = (m.motivo_anulacion || '').replace(/[\n\r;]/g, " "); // Reemplaza saltos y punto y coma
+        const motivo = (m.motivo_anulacion || '').replace(/[\n\r;]/g, " ");
         
         const row = [
             estudiante,
@@ -224,47 +208,53 @@ const exportToExcel = () => {
     document.body.removeChild(link);
 };
 
+// Cómputo global de ingresos recaudados en caja
 const totalRecaudado = computed(() => {
     return props.mensualidades
          .filter(m => m.estado === 'Pagado')
          .reduce((sum, m) => sum + Number(m.total), 0);
 });
 
+// Cómputo global de saldos por cobrar
 const totalPendiente = computed(() => {
     return props.mensualidades
          .filter(m => m.estado === 'Pendiente' || m.estado === 'Pendiente_Verificacion')
          .reduce((sum, m) => sum + Number(m.total), 0);
 });
 
+// Cómputo global de pagos capturados en efectivo físico
 const totalEfectivo = computed(() => {
     return props.mensualidades
          .filter(m => m.estado === 'Pagado' && m.metodo_pago === 'Efectivo')
          .reduce((sum, m) => sum + Number(m.total), 0);
 });
 
+// Cómputo global de pagos capturados vía canales QR/Digitales
 const totalQR = computed(() => {
     return props.mensualidades
          .filter(m => m.estado === 'Pagado' && m.metodo_pago === 'QR')
          .reduce((sum, m) => sum + Number(m.total), 0);
 });
 
+// Porcentaje de cobranza consolidada
 const porcentajeCobro = computed(() => {
     const total = totalRecaudado.value + totalPendiente.value;
     if (total === 0) return 0;
     return Math.round((totalRecaudado.value / total) * 100);
 });
 
+// Envía el formulario para crear las deudas mensuales a los estudiantes activos
 const submitGenerar = () => {
     formGenerar.post(route('mensualidades.generar_masivo'), {
         preserveScroll: true,
         onSuccess: () => {
             showGenerarModal.value = false;
             formGenerar.registro_internado_ids = [];
-            searchStudentInModal.value = '';
         }
     });
 };
 
+// Abre el modal de cobranza individual asignando valores predeterminados
 const openPagarModal = (m: any) => {
     mensualidadSeleccionada.value = m;
     formPagar.estado = 'Pagado';
@@ -273,6 +263,7 @@ const openPagarModal = (m: any) => {
     showPagarModal.value = true;
 };
 
+// Procesa el registro del cobro del estudiante
 const submitPagar = () => {
     formPagar.put(route('mensualidades.update', mensualidadSeleccionada.value.id), {
         preserveScroll: true,
@@ -283,6 +274,7 @@ const submitPagar = () => {
     });
 };
 
+// Abre el modal para capturar la justificación de anulación
 const openAnularModal = (m: any) => {
     mensualidadAAnular.value = m;
     formAnular.motivo_anulacion = '';
@@ -291,24 +283,24 @@ const openAnularModal = (m: any) => {
     showAnularModal.value = true;
 };
 
+// Procesa la anulación del cobro registrado mediante credenciales
 const submitAnular = () => {
     formAnular.put(route('mensualidades.update', mensualidadAAnular.value.id), {
         preserveScroll: true,
         onSuccess: () => {
             showAnularModal.value = false;
             alert('Pago anulado exitosamente.');
-        },
-        onError: (errors) => {
-            console.error(errors);
         }
     });
 };
 
+// Abre el modal visor para auditar el motivo de anulación
 const openVerAnuladoModal = (m: any) => {
     mensualidadVerAnulada.value = m;
     showViewAnuladoModal.value = true;
 };
 
+// Elimina permanentemente el registro de deuda de un estudiante (siempre que esté pendiente)
 const deleteMensualidad = (id: number) => {
     if (confirm('¿Estás seguro de eliminar este registro de deuda?')) {
         router.delete(route('mensualidades.destroy', id), {
@@ -320,7 +312,8 @@ const deleteMensualidad = (id: number) => {
             }
         });
     }
-};</script>
+};
+</script>
 
 <template>
     <Head title="Gestión de Mensualidades" />
@@ -400,7 +393,7 @@ const deleteMensualidad = (id: number) => {
                     </div>
                 </div>
 
-                <!-- Super Filtros y Caja -->
+                <!-- Super Filtros y Panel de Control -->
                 <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 mb-6 space-y-4">
                     <div class="flex flex-wrap items-center justify-between gap-4">
                         <div>
@@ -461,12 +454,12 @@ const deleteMensualidad = (id: number) => {
                         </div>
                     </div>
 
-                    <!-- Inline performance switch helper -->
+                    <!-- Activador Carga Diferida (Rendimiento) -->
                     <div class="mt-5 pt-4 border-t border-gray-150 flex items-center justify-between gap-4 flex-wrap">
                         <div class="flex items-center gap-2">
-                            <span class="inline-block h-2.5 w-2.5 rounded-full bg-amber-500 animate-pulse" v-if="mensualidades.length === 0"></span>
+                            <span class="inline-block h-2.5 w-2.5 rounded-full bg-amber-500 animate-pulse" v-if="props.mensualidades.length === 0"></span>
                             <span class="text-xs text-gray-500 font-bold">
-                                {{ mensualidades.length === 0 ? 'Carga optimizada: listado oculto inicialmente para acelerar el sistema.' : 'Listado dinámico cargado exitosamente.' }}
+                                {{ props.mensualidades.length === 0 ? 'Carga optimizada: listado oculto inicialmente para acelerar el sistema.' : 'Listado dinámico cargado exitosamente.' }}
                             </span>
                         </div>
                         <label class="inline-flex items-center gap-2.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 px-4 py-2 rounded-xl cursor-pointer transition select-none">
@@ -477,8 +470,9 @@ const deleteMensualidad = (id: number) => {
 
                 </div>
 
+                <!-- Tabla Principal de Mensualidades (Modularizada) -->
                 <div class="bg-white rounded-2xl shadow-sm overflow-hidden border border-gray-100">
-                    <div v-if="mensualidades.length === 0" class="py-20 px-8 text-center max-w-lg mx-auto">
+                    <div v-if="props.mensualidades.length === 0" class="py-20 px-8 text-center max-w-lg mx-auto">
                         <div class="h-16 w-16 rounded-full bg-teal-50 text-teal-600 flex items-center justify-center mx-auto mb-5 text-3xl shadow-sm">
                             💵
                         </div>
@@ -489,291 +483,50 @@ const deleteMensualidad = (id: number) => {
                         </button>
                     </div>
                     <div v-else class="overflow-x-auto">
-                        <table class="min-w-full divide-y divide-gray-200">
-                            <thead class="bg-gray-50">
-                                <tr>
-                                    <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Estudiante</th>
-                                    <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Mes</th>
-                                    <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Monto</th>
-                                    <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Estado</th>
-                                    <th class="px-6 py-4 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Acciones</th>
-                                </tr>
-                            </thead>
-                            <tbody class="bg-white divide-y divide-gray-200">
-                                <tr v-for="m in filteredMensualidades" :key="m.id" class="hover:bg-gray-50 transition">
-                                    <td class="px-6 py-4 whitespace-nowrap">
-                                        <div class="text-sm font-bold text-gray-900">{{ m.registro_internado?.estudiante?.persona?.nombre }} {{ m.registro_internado?.estudiante?.persona?.ap_paterno }}</div>
-                                        <div class="flex flex-wrap gap-1.5 mt-1.5">
-                                            <span class="text-[10px] text-gray-500 font-bold bg-gray-100 px-2 py-0.5 rounded-md border border-gray-200/60">CI: {{ m.registro_internado?.estudiante?.persona?.ci }}</span>
-                                            <span class="text-[10px] text-teal-700 font-extrabold bg-teal-50 px-2 py-0.5 rounded-md border border-teal-100">📅 {{ m.registro_internado?.gestion?.nombre_gestion }}</span>
-                                            <span v-if="m.registro_internado?.curso" class="text-[10px] text-indigo-700 font-extrabold bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100">🎓 {{ m.registro_internado?.curso?.nombre }}</span>
-                                        </div>
-                                    </td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                        {{ m.mes }}
-                                    </td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                        Bs. {{ m.total }}
-                                    </td>
-                                    <td class="px-6 py-4 whitespace-nowrap">
-                                        <span v-if="m.estado === 'Pagado'" class="inline-flex flex-col">
-                                            <span class="px-3 py-1 text-xs font-bold rounded-full bg-green-100 text-green-800 self-start">Pagado ({{ m.metodo_pago }})</span>
-                                            <span class="text-[10px] text-gray-500 font-bold mt-1">📅 {{ m.fecha_pago }}</span>
-                                        </span>
-                                        <span v-else-if="m.estado === 'Anulado'" class="inline-flex flex-col">
-                                            <span class="px-3 py-1 text-xs font-bold rounded-full bg-rose-100 text-rose-800 self-start">Anulado</span>
-                                            <span class="text-[10px] text-rose-500 font-bold mt-1">Ver motivo 👁️</span>
-                                        </span>
-                                        <span v-else class="px-3 py-1 text-xs font-bold rounded-full bg-yellow-100 text-yellow-800">Pendiente</span>
-                                    </td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
-                                        <!-- Pago Pendiente -->
-                                        <template v-if="m.estado === 'Pendiente' || m.estado === 'Pendiente_Verificacion'">
-                                            <button @click="openPagarModal(m)" class="inline-flex items-center gap-1 px-3 py-1.5 bg-teal-50 hover:bg-teal-100 text-teal-600 rounded-xl text-xs font-bold transition">
-                                                💵 Cobrar
-                                            </button>
-                                            <button @click="deleteMensualidad(m.id)" class="inline-flex items-center gap-1 px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl text-xs font-bold transition">
-                                                ❌ Eliminar
-                                            </button>
-                                        </template>
-                                        
-                                        <!-- Pago Realizado (Pagado) -->
-                                        <template v-else-if="m.estado === 'Pagado'">
-                                            <button @click="openAnularModal(m)" class="inline-flex items-center gap-1 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl text-xs font-bold transition">
-                                                🚫 Anular
-                                            </button>
-                                        </template>
-                                        
-                                        <!-- Pago Anulado -->
-                                        <template v-else-if="m.estado === 'Anulado'">
-                                            <button @click="openVerAnuladoModal(m)" class="inline-flex items-center gap-1 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-xl text-xs font-bold transition">
-                                                👁️ Ver Motivo
-                                            </button>
-                                        </template>
-                                    </td>
-                                </tr>
-                                <tr v-if="filteredMensualidades.length === 0">
-                                    <td colspan="5" class="px-6 py-8 text-center text-gray-500">No se encontraron registros de mensualidades.</td>
-                                </tr>
-                            </tbody>
-                        </table>
+                        <MensualidadesTable 
+                            :filtered-mensualidades="filteredMensualidades"
+                            @pay="openPagarModal"
+                            @delete="deleteMensualidad"
+                            @anular="openAnularModal"
+                            @viewAnulado="openVerAnuladoModal"
+                        />
                     </div>
                 </div>
 
-                <!-- Modal Generar -->
-                <div v-if="showGenerarModal" class="fixed z-50 inset-0 overflow-y-auto">
-                    <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-                        <div class="fixed inset-0 transition-opacity backdrop-blur-sm bg-gray-900/50" @click="showGenerarModal = false"></div>
-                        <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
-                        <div class="inline-block align-bottom bg-white rounded-2xl text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-md sm:w-full">
-                            <form @submit.prevent="submitGenerar">
-                                <div class="bg-white px-6 pt-6 pb-4">
-                                    <h3 class="text-xl font-bold text-gray-900 mb-6">Generación Masiva de Deudas</h3>
-                                    <p class="text-sm text-gray-500 mb-4">Seleccione a los estudiantes activos a los que desea generar la deuda.</p>
-                                    
-                                    <div class="mb-4">
-                                        <label class="block text-sm font-medium text-gray-700 mb-1">Tipo de Deuda</label>
-                                        <select v-model="formGenerar.concepto_tipo" class="w-full rounded-lg border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500 text-sm">
-                                            <option value="mes">Mensualidad Regular (Mes)</option>
-                                            <option value="personalizado">Concepto Personalizado (Otro)</option>
-                                        </select>
-                                    </div>
+                <!-- Modal Generar Deudas Masivas (Modularizado) -->
+                <GenerarMasivoModal 
+                    :show-generar-modal="showGenerarModal"
+                    :meses-disponibles="mesesDisponibles"
+                    :form-generar="formGenerar"
+                    :estudiantes-activos="estudiantesActivos || []"
+                    @close="showGenerarModal = false"
+                    @submit="submitGenerar"
+                />
 
-                                    <div class="grid grid-cols-2 gap-4 mb-4">
-                                        <div v-if="formGenerar.concepto_tipo === 'mes'">
-                                            <label class="block text-sm font-medium text-gray-700 mb-1">Mes a Generar</label>
-                                            <select v-model="formGenerar.mes" class="w-full rounded-lg border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500 text-sm">
-                                                <option v-for="mes in mesesDisponibles" :key="mes" :value="mes">{{ mes }}</option>
-                                            </select>
-                                        </div>
-                                        <div v-else>
-                                            <label class="block text-sm font-medium text-gray-700 mb-1">Concepto Específico</label>
-                                            <input type="text" v-model="formGenerar.concepto_personalizado" placeholder="ej. Aporte de Aseo, Material" class="w-full rounded-lg border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500 text-sm" required>
-                                        </div>
-                                        <div>
-                                            <label class="block text-sm font-medium text-gray-700 mb-1">Monto (Bs.)</label>
-                                            <input type="number" v-model="formGenerar.monto" min="0" class="w-full rounded-lg border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500 text-sm">
-                                        </div>
-                                    </div>
+                <!-- Modal Registrar Pago Individual (Modularizado) -->
+                <CobrarModal 
+                    :show-pagar-modal="showPagarModal"
+                    :mensualidad-seleccionada="mensualidadSeleccionada"
+                    :form-pagar="formPagar"
+                    @close="showPagarModal = false"
+                    @submit="submitPagar"
+                />
 
-                                    <div class="mb-2">
-                                        <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Asignar a Estudiantes Específicos:</label>
-                                        <input type="text" v-model="searchStudentInModal" placeholder="🔍 Buscar estudiante por Nombre o C.I..." class="w-full rounded-lg border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500 text-xs py-1.5 px-3 bg-slate-50 mb-3">
-                                    </div>
+                <!-- Modal Anular Pago Con Contraseña (Modularizado) -->
+                <AnularModal 
+                    :show-anular-modal="showAnularModal"
+                    :mensualidad-a-anular="mensualidadAAnular"
+                    :form-anular="formAnular"
+                    @close="showAnularModal = false"
+                    @submit="submitAnular"
+                />
 
-                                    <div class="border rounded-lg max-h-60 overflow-y-auto">
-                                        <table class="min-w-full divide-y divide-gray-200">
-                                            <thead class="bg-gray-50 sticky top-0">
-                                                <tr>
-                                                    <th class="px-4 py-2 text-left">
-                                                        <input type="checkbox" v-model="seleccionarTodos" class="rounded border-gray-300 text-teal-600 focus:ring-teal-500">
-                                                    </th>
-                                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estudiante</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody class="bg-white divide-y divide-gray-200">
-                                                <tr v-for="est in filteredEstudiantesActivos" :key="est.id" class="hover:bg-gray-50">
-                                                    <td class="px-4 py-2">
-                                                        <input type="checkbox" :value="est.id" v-model="formGenerar.registro_internado_ids" class="rounded border-gray-300 text-teal-600 focus:ring-teal-500">
-                                                    </td>
-                                                    <td class="px-4 py-2 text-sm text-gray-900">
-                                                        {{ est.estudiante?.persona?.nombre }} {{ est.estudiante?.persona?.ap_paterno }} <span class="text-xs text-gray-400 font-medium">(CI: {{ est.estudiante?.persona?.ci }})</span>
-                                                    </td>
-                                                </tr>
-                                                <tr v-if="!filteredEstudiantesActivos || filteredEstudiantesActivos.length === 0">
-                                                    <td colspan="2" class="px-4 py-4 text-center text-sm text-gray-500">No se encontraron estudiantes coincidentes.</td>
-                                                </tr>
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                    <p class="text-xs text-red-600 mt-2 font-medium" v-if="formGenerar.errors.mes">{{ formGenerar.errors.mes }}</p>
-                                    <p class="text-xs text-red-600 mt-2 font-medium" v-if="formGenerar.errors.registro_internado_ids">{{ formGenerar.errors.registro_internado_ids }}</p>
-                                </div>
-                                <div class="bg-gray-50 px-6 py-4 flex flex-row-reverse rounded-b-2xl">
-                                    <button type="submit" :disabled="formGenerar.processing" class="w-full inline-flex justify-center rounded-lg shadow-sm px-4 py-2 bg-teal-600 text-base font-medium text-white hover:bg-teal-700 sm:ml-3 sm:w-auto sm:text-sm">
-                                        {{ formGenerar.processing ? 'Generando...' : 'Generar' }}
-                                    </button>
-                                    <button @click="showGenerarModal = false" type="button" class="mt-3 w-full inline-flex justify-center rounded-lg border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">
-                                        Cancelar
-                                    </button>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Modal Registrar Pago -->
-                <div v-if="showPagarModal" class="fixed z-50 inset-0 overflow-y-auto">
-                    <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-                        <div class="fixed inset-0 transition-opacity backdrop-blur-sm bg-gray-900/50" @click="showPagarModal = false"></div>
-                        <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
-                        <div class="inline-block align-bottom bg-white rounded-2xl text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-md sm:w-full">
-                            <form @submit.prevent="submitPagar">
-                                <div class="bg-white px-6 pt-6 pb-4">
-                                    <h3 class="text-xl font-bold text-gray-900 mb-6">Registrar Pago</h3>
-                                    <div class="mb-4 p-4 bg-gray-50 rounded-lg">
-                                        <p class="text-sm font-medium text-gray-900">{{ mensualidadSeleccionada?.registro_internado?.estudiante?.persona?.nombre }} {{ mensualidadSeleccionada?.registro_internado?.estudiante?.persona?.ap_paterno }}</p>
-                                        <p class="text-xs text-gray-500">Mes: {{ mensualidadSeleccionada?.mes }} | Monto: Bs. {{ mensualidadSeleccionada?.total }}</p>
-                                    </div>
-                                    
-                                    <div class="space-y-4">
-                                        <div>
-                                            <label class="block text-sm font-medium text-gray-700 mb-1">Método de Pago</label>
-                                            <select v-model="formPagar.metodo_pago" class="w-full rounded-lg border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500">
-                                                <option value="Efectivo">Efectivo Físico</option>
-                                                <option value="QR">Transferencia Bancaria / QR</option>
-                                            </select>
-                                        </div>
-                                        <div>
-                                            <label class="block text-sm font-medium text-gray-700 mb-1">Fecha de Pago</label>
-                                            <input type="date" v-model="formPagar.fecha_pago" class="w-full rounded-lg border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500 text-sm font-semibold text-gray-700">
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="bg-gray-50 px-6 py-4 flex flex-row-reverse rounded-b-2xl">
-                                    <button type="submit" :disabled="formPagar.processing" class="w-full inline-flex justify-center rounded-lg shadow-sm px-4 py-2 bg-teal-600 text-base font-medium text-white hover:bg-teal-700 sm:ml-3 sm:w-auto sm:text-sm">
-                                        {{ formPagar.processing ? 'Registrando...' : 'Confirmar Pago' }}
-                                    </button>
-                                    <button @click="showPagarModal = false" type="button" class="mt-3 w-full inline-flex justify-center rounded-lg border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">
-                                        Cancelar
-                                    </button>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Modal Anular Pago -->
-                <div v-if="showAnularModal" class="fixed z-50 inset-0 overflow-y-auto">
-                    <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-                        <div class="fixed inset-0 transition-opacity backdrop-blur-sm bg-gray-900/50" @click="showAnularModal = false"></div>
-                        <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
-                        <div class="inline-block align-bottom bg-white rounded-3xl text-left overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-md sm:w-full border border-slate-100">
-                            <form @submit.prevent="submitAnular">
-                                <div class="bg-white px-6 pt-6 pb-4">
-                                    <div class="flex items-center gap-3 mb-4">
-                                        <div class="p-2 bg-red-100 text-red-700 rounded-xl">
-                                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
-                                        </div>
-                                        <h3 class="text-lg font-black text-slate-800 leading-tight">Anular Transacción</h3>
-                                    </div>
-                                    
-                                    <div class="mb-4 p-4 bg-red-50 rounded-2xl border border-red-100">
-                                        <p class="text-sm font-bold text-red-900">{{ mensualidadAAnular?.registro_internado?.estudiante?.persona?.nombre }} {{ mensualidadAAnular?.registro_internado?.estudiante?.persona?.ap_paterno }}</p>
-                                        <p class="text-xs text-red-700 font-medium">Mes: {{ mensualidadAAnular?.mes }} | Monto original: Bs. {{ mensualidadAAnular?.total }}</p>
-                                    </div>
-
-                                    <div class="space-y-4">
-                                        <div>
-                                            <label class="block text-xs font-black text-slate-500 uppercase tracking-widest mb-1.5">Motivo de Anulación</label>
-                                            <textarea v-model="formAnular.motivo_anulacion" rows="3" required placeholder="Escriba detalladamente el motivo de la anulación..." class="w-full rounded-xl border-gray-200 shadow-sm focus:border-red-500 focus:ring-red-500 text-sm font-medium text-slate-700"></textarea>
-                                            <p v-if="formAnular.errors.motivo_anulacion" class="text-xs text-red-600 mt-1 font-bold">{{ formAnular.errors.motivo_anulacion }}</p>
-                                        </div>
-                                        <div>
-                                            <label class="block text-xs font-black text-slate-500 uppercase tracking-widest mb-1.5">Confirmar Contraseña de Admin</label>
-                                            <input type="password" v-model="formAnular.password" required placeholder="Ingrese su contraseña actual..." class="w-full rounded-xl border-gray-200 shadow-sm focus:border-red-500 focus:ring-red-500 text-sm font-semibold text-slate-700">
-                                            <p v-if="formAnular.errors.password" class="text-xs text-red-600 mt-1 font-bold">{{ formAnular.errors.password }}</p>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="bg-slate-50 px-6 py-4 flex flex-row-reverse rounded-b-3xl border-t border-slate-100">
-                                    <button type="submit" :disabled="formAnular.processing" class="w-full inline-flex justify-center rounded-xl shadow-sm px-5 py-2.5 bg-red-600 text-sm font-bold text-white hover:bg-red-700 sm:ml-3 sm:w-auto transition">
-                                        {{ formAnular.processing ? 'Anulando...' : 'Anular Pago' }}
-                                    </button>
-                                    <button @click="showAnularModal = false" type="button" class="mt-3 w-full inline-flex justify-center rounded-xl border border-slate-200 shadow-sm px-5 py-2.5 bg-white text-sm font-bold text-slate-700 hover:bg-slate-50 sm:mt-0 sm:ml-3 sm:w-auto transition">
-                                        Cancelar
-                                    </button>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Modal Ver Motivo de Anulación -->
-                <div v-if="showViewAnuladoModal" class="fixed z-50 inset-0 overflow-y-auto">
-                    <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-                        <div class="fixed inset-0 transition-opacity backdrop-blur-sm bg-gray-900/50" @click="showViewAnuladoModal = false"></div>
-                        <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
-                        <div class="inline-block align-bottom bg-white rounded-3xl text-left overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-md sm:w-full border border-slate-100">
-                            <div class="bg-white px-6 pt-6 pb-4">
-                                <div class="flex items-center gap-3 mb-4">
-                                    <div class="p-2 bg-indigo-100 text-indigo-700 rounded-xl">
-                                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
-                                    </div>
-                                    <h3 class="text-lg font-black text-slate-800 leading-tight">Detalles de Anulación</h3>
-                                </div>
-                                
-                                <div class="mb-4 p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-2">
-                                    <p class="text-sm font-bold text-slate-800">
-                                        <span class="text-slate-400 font-semibold uppercase text-xs block">Estudiante</span>
-                                        {{ mensualidadVerAnulada?.registro_internado?.estudiante?.persona?.nombre }} {{ mensualidadVerAnulada?.registro_internado?.estudiante?.persona?.ap_paterno }}
-                                    </p>
-                                    <p class="text-sm font-bold text-slate-800">
-                                        <span class="text-slate-400 font-semibold uppercase text-xs block">Mes y Monto</span>
-                                        Mes: {{ mensualidadVerAnulada?.mes }} &mdash; Bs. {{ mensualidadVerAnulada?.total }}
-                                    </p>
-                                </div>
-
-                                <div class="space-y-4">
-                                    <div class="p-4 bg-rose-50 rounded-2xl border border-rose-100">
-                                        <span class="text-rose-500 font-black uppercase text-[10px] tracking-widest block mb-1">Motivo de Anulación Oficial</span>
-                                        <p class="text-sm font-semibold text-rose-900 italic">
-                                            "{{ mensualidadVerAnulada?.motivo_anulacion || 'Sin motivo especificado' }}"
-                                        </p>
-                                    </div>
-                                    <div class="text-xs text-slate-400 font-semibold">
-                                        Anulado el: {{ new Date(mensualidadVerAnulada?.updated_at).toLocaleDateString() }} a las {{ new Date(mensualidadVerAnulada?.updated_at).toLocaleTimeString() }}
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="bg-slate-50 px-6 py-4 flex flex-row-reverse rounded-b-3xl border-t border-slate-100">
-                                <button @click="showViewAnuladoModal = false" type="button" class="w-full inline-flex justify-center rounded-xl border border-slate-200 shadow-sm px-5 py-2.5 bg-white text-sm font-bold text-slate-700 hover:bg-slate-50 sm:w-auto transition">
-                                    Cerrar Vista
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                <!-- Modal Auditar Pago Anulado (Modularizado) -->
+                <VerAnuladoModal 
+                    :show-view-anulado-modal="showViewAnuladoModal"
+                    :mensualidad-ver-anulada="mensualidadVerAnulada"
+                    @close="showViewAnuladoModal = false"
+                />
 
             </div>
         </div>
