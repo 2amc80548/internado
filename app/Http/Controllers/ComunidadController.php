@@ -11,6 +11,7 @@ class ComunidadController extends Controller
 {
     public function index()
     {
+        $this->checkPermission('comunidades.index');
         $comunidades = Comunidad::with('provincia')->latest()->get();
         $provincias = Provincia::all();
         
@@ -22,6 +23,7 @@ class ComunidadController extends Controller
 
     public function store(Request $request)
     {
+        $this->checkPermission('comunidades.index');
         $request->validate([
             'nombre' => 'required|string|max:255',
             'provincia_id' => 'required|exists:provincias,id'
@@ -34,6 +36,7 @@ class ComunidadController extends Controller
 
     public function update(Request $request, Comunidad $comunidade)
     {
+        $this->checkPermission('comunidades.index');
         $request->validate([
             'nombre' => 'required|string|max:255',
             'provincia_id' => 'required|exists:provincias,id'
@@ -46,6 +49,7 @@ class ComunidadController extends Controller
 
     public function destroy(Comunidad $comunidade)
     {
+        $this->checkPermission('comunidades.index');
         $comunidade->delete();
         return redirect()->back()->with('message', 'Comunidad eliminada.');
     }

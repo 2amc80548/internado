@@ -37,7 +37,7 @@ class EstudiantesMasivosSeeder extends Seeder
         $this->command->info("Generando 20 estudiantes al azar... Por favor espera.");
 
         // 2. Generar los 300 estudiantes en un bucle
-        for ($i = 1; $i <= 20; $i++) {
+        for ($i = 1; $i <= 100; $i++) {
 
             // Decidir sexo de forma aleatoria (para pabellón coherente)
             $sexo = $faker->randomElement(['M', 'F']);

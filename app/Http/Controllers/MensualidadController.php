@@ -13,12 +13,19 @@ use Illuminate\Support\Facades\DB;
 
 class MensualidadController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
         $this->checkPermission('mensualidades.index');
-        $mensualidades = Mensualidad::with(['registroInternado.estudiante.persona', 'registroInternado.gestion', 'registroInternado.curso'])->latest()->get();
-        
+
+        $search = $request->query('search');
+        $estado = $request->query('estado');
+        $gestionId = $request->query('gestion_id');
+        $cargarTodos = $request->boolean('cargar_todos') || $request->query('cargar_todos') === '1';
+
+        $hasFilters = $search || $estado || $gestionId || $cargarTodos;
+
         $gestionActual = Gestion::where('estado', 'Activo')->first();
+        
         $estudiantesActivos = [];
         if ($gestionActual) {
             $estudiantesActivos = RegistroInternado::with('estudiante.persona')
@@ -28,6 +35,41 @@ class MensualidadController extends Controller
         }
 
         $gestiones = Gestion::orderBy('nombre_gestion', 'desc')->get();
+
+        if ($hasFilters) {
+            $query = Mensualidad::with([
+                'registroInternado.estudiante.persona', 
+                'registroInternado.gestion', 
+                'registroInternado.curso'
+            ]);
+
+            if ($search) {
+                $query->whereHas('registroInternado.estudiante.persona', function($q) use ($search) {
+                    $q->where('nombre', 'ilike', "%{$search}%")
+                      ->orWhere('ap_paterno', 'ilike', "%{$search}%")
+                      ->orWhere('ap_materno', 'ilike', "%{$search}%")
+                      ->orWhere('ci', 'like', "%{$search}%");
+                });
+            }
+
+            if ($estado) {
+                if ($estado === 'Pendiente') {
+                    $query->whereIn('estado', ['Pendiente', 'Pendiente_Verificacion']);
+                } else {
+                    $query->where('estado', $estado);
+                }
+            }
+
+            if ($gestionId) {
+                $query->whereHas('registroInternado', function($q) use ($gestionId) {
+                    $q->where('gestion_id', $gestionId);
+                });
+            }
+
+            $mensualidades = $query->latest()->get();
+        } else {
+            $mensualidades = [];
+        }
 
         return Inertia::render('Admin/Mensualidades/Index', [
             'mensualidades' => $mensualidades,

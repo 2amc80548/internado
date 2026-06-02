@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, useForm, router } from '@inertiajs/vue3';
-import { ref, computed } from 'vue';
+import { ref, computed, watch, onMounted } from 'vue';
 
 const props = defineProps<{
     mensualidades: any[];
@@ -59,6 +59,42 @@ const formPagar = useForm({
 });
 
 const searchQuery = ref('');
+const cargarTodosSwitch = ref(false);
+
+const performServerSearch = () => {
+    router.get(route('mensualidades.index'), {
+        search: searchQuery.value,
+        estado: estadoFilter.value,
+        gestion_id: gestionIdFilter.value,
+        cargar_todos: cargarTodosSwitch.value ? '1' : '0'
+    }, {
+        preserveState: true,
+        preserveScroll: true,
+        only: ['mensualidades']
+    });
+};
+
+watch(cargarTodosSwitch, () => {
+    performServerSearch();
+});
+
+watch(() => [
+    estadoFilter.value,
+    gestionIdFilter.value
+], () => {
+    performServerSearch();
+});
+
+onMounted(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('cargar_todos') === '1') {
+        cargarTodosSwitch.value = true;
+    }
+    if (urlParams.get('search')) {
+        searchQuery.value = urlParams.get('search') || '';
+    }
+});
+
 const estadoFilter = ref('Pendiente'); // Muestra 'Pendientes' por defecto
 const fechaInicioFilter = ref('');
 const fechaFinFilter = ref('');
@@ -388,7 +424,7 @@ const deleteMensualidad = (id: number) => {
                         <!-- Búsqueda -->
                         <div class="relative">
                             <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Búsqueda General</label>
-                            <input v-model="searchQuery" type="text" placeholder="Nombre, CI o Mes..." class="w-full pl-10 pr-4 py-2 border-gray-200 rounded-xl shadow-sm focus:ring-teal-500 focus:border-teal-500 text-sm font-semibold text-gray-700 placeholder-gray-400">
+                            <input v-model="searchQuery" @keydown.enter="performServerSearch" type="text" placeholder="Nombre, CI o Mes... (Enter)" class="w-full pl-10 pr-4 py-2 border-gray-200 rounded-xl shadow-sm focus:ring-teal-500 focus:border-teal-500 text-sm font-semibold text-gray-700 placeholder-gray-400">
                             <svg class="w-4 h-4 text-gray-400 absolute left-3.5 bottom-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
                         </div>
 
@@ -424,10 +460,35 @@ const deleteMensualidad = (id: number) => {
                             <input v-model="fechaFinFilter" type="date" class="w-full rounded-xl border-gray-200 shadow-sm focus:ring-teal-500 focus:border-teal-500 text-sm font-semibold text-gray-700">
                         </div>
                     </div>
+
+                    <!-- Inline performance switch helper -->
+                    <div class="mt-5 pt-4 border-t border-gray-150 flex items-center justify-between gap-4 flex-wrap">
+                        <div class="flex items-center gap-2">
+                            <span class="inline-block h-2.5 w-2.5 rounded-full bg-amber-500 animate-pulse" v-if="mensualidades.length === 0"></span>
+                            <span class="text-xs text-gray-500 font-bold">
+                                {{ mensualidades.length === 0 ? 'Carga optimizada: listado oculto inicialmente para acelerar el sistema.' : 'Listado dinámico cargado exitosamente.' }}
+                            </span>
+                        </div>
+                        <label class="inline-flex items-center gap-2.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 px-4 py-2 rounded-xl cursor-pointer transition select-none">
+                            <input type="checkbox" v-model="cargarTodosSwitch" class="h-4.5 w-4.5 rounded border-gray-300 text-teal-600 focus:ring-teal-500 cursor-pointer">
+                            <span class="text-xs font-black text-gray-700">Cargar listado completo de mensualidades</span>
+                        </label>
+                    </div>
+
                 </div>
 
                 <div class="bg-white rounded-2xl shadow-sm overflow-hidden border border-gray-100">
-                    <div class="overflow-x-auto">
+                    <div v-if="mensualidades.length === 0" class="py-20 px-8 text-center max-w-lg mx-auto">
+                        <div class="h-16 w-16 rounded-full bg-teal-50 text-teal-600 flex items-center justify-center mx-auto mb-5 text-3xl shadow-sm">
+                            💵
+                        </div>
+                        <h3 class="text-lg font-black text-gray-800 mb-1.5">Listado de Mensualidades (Pagos)</h3>
+                        <p class="text-sm text-gray-500 leading-relaxed mb-6">Para garantizar la máxima velocidad de carga, la lista no se carga por defecto. Active el interruptor de carga completa, realice una búsqueda y presione Enter o aplique un filtro para visualizar los registros.</p>
+                        <button @click="cargarTodosSwitch = true" class="inline-flex items-center justify-center bg-teal-600 hover:bg-teal-700 text-white font-black py-2.5 px-6 rounded-xl shadow-md transition text-xs">
+                            Cargar Todo el Listado
+                        </button>
+                    </div>
+                    <div v-else class="overflow-x-auto">
                         <table class="min-w-full divide-y divide-gray-200">
                             <thead class="bg-gray-50">
                                 <tr>

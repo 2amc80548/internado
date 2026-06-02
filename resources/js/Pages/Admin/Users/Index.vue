@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, useForm, router } from '@inertiajs/vue3';
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 
 const props = defineProps<{
@@ -22,6 +22,44 @@ const filter = ref({
     rol_id: '',
     estado_cuenta: '',
     sexo: ''
+});
+
+const cargarTodosSwitch = ref(false);
+
+const performServerSearch = () => {
+    router.get(route('users.index'), {
+        search: filter.value.texto,
+        rol_id: filter.value.rol_id,
+        estado_cuenta: filter.value.estado_cuenta,
+        sexo: filter.value.sexo,
+        cargar_todos: cargarTodosSwitch.value ? '1' : '0'
+    }, {
+        preserveState: true,
+        preserveScroll: true,
+        only: ['users']
+    });
+};
+
+watch(cargarTodosSwitch, () => {
+    performServerSearch();
+});
+
+watch(() => [
+    filter.value.rol_id,
+    filter.value.estado_cuenta,
+    filter.value.sexo
+], () => {
+    performServerSearch();
+});
+
+onMounted(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('cargar_todos') === '1') {
+        cargarTodosSwitch.value = true;
+    }
+    if (urlParams.get('search')) {
+        filter.value.texto = urlParams.get('search') || '';
+    }
 });
 
 const selectedUsers = ref<number[]>([]);
@@ -333,7 +371,7 @@ const aprobarMasivo = () => {
                         <div>
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider">Buscar por Texto</label>
                             <div class="relative mt-1">
-                                <input v-model="filter.texto" type="text" placeholder="CI, Nombre, Celular..." class="w-full pl-8 pr-3 py-2 border-gray-300 rounded-lg text-sm shadow-sm focus:ring-teal-500 focus:border-teal-500">
+                                <input v-model="filter.texto" @keydown.enter="performServerSearch" type="text" placeholder="CI, Nombre, Celular... (Enter)" class="w-full pl-8 pr-3 py-2 border-gray-300 rounded-lg text-sm shadow-sm focus:ring-teal-500 focus:border-teal-500">
                                 <svg class="w-4 h-4 text-gray-400 absolute left-2.5 top-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
                             </div>
                         </div>
@@ -365,11 +403,36 @@ const aprobarMasivo = () => {
                             </select>
                         </div>
                     </div>
+
+                    <!-- Inline performance switch helper -->
+                    <div class="mt-5 pt-4 border-t border-gray-150 flex items-center justify-between gap-4 flex-wrap">
+                        <div class="flex items-center gap-2">
+                            <span class="inline-block h-2.5 w-2.5 rounded-full bg-amber-500 animate-pulse" v-if="users.length === 0"></span>
+                            <span class="text-xs text-gray-500 font-bold">
+                                {{ users.length === 0 ? 'Carga optimizada: listado oculto inicialmente para acelerar el sistema.' : 'Listado dinámico cargado exitosamente.' }}
+                            </span>
+                        </div>
+                        <label class="inline-flex items-center gap-2.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 px-4 py-2 rounded-xl cursor-pointer transition select-none">
+                            <input type="checkbox" v-model="cargarTodosSwitch" class="h-4.5 w-4.5 rounded border-gray-300 text-teal-600 focus:ring-teal-500 cursor-pointer">
+                            <span class="text-xs font-black text-gray-700">Cargar listado completo de usuarios</span>
+                        </label>
+                    </div>
+
                 </div>
 
                 <!-- Tabla de Resultados -->
                 <div class="bg-white rounded-2xl shadow-sm overflow-hidden border border-gray-100">
-                    <div class="overflow-x-auto">
+                    <div v-if="users.length === 0" class="py-20 px-8 text-center max-w-lg mx-auto">
+                        <div class="h-16 w-16 rounded-full bg-teal-50 text-teal-600 flex items-center justify-center mx-auto mb-5 text-3xl shadow-sm">
+                            👤
+                        </div>
+                        <h3 class="text-lg font-black text-gray-800 mb-1.5">Listado de Usuarios</h3>
+                        <p class="text-sm text-gray-500 leading-relaxed mb-6">Para garantizar la máxima velocidad de carga, la lista no se carga por defecto. Active el interruptor de carga completa, realice una búsqueda y presione Enter o aplique un filtro para visualizar los registros.</p>
+                        <button @click="cargarTodosSwitch = true" class="inline-flex items-center justify-center bg-teal-600 hover:bg-teal-700 text-white font-black py-2.5 px-6 rounded-xl shadow-md transition text-xs">
+                            Cargar Todo el Listado
+                        </button>
+                    </div>
+                    <div v-else class="overflow-x-auto">
                         <table class="min-w-full divide-y divide-gray-200">
                             <thead class="bg-gray-50">
                                 <tr>

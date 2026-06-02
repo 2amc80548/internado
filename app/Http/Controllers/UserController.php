@@ -20,14 +20,57 @@ use Illuminate\Support\Facades\DB;
 
 class UserController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $users = User::with([
-            'persona.estudiante', 
-            'rol'
-        ])->get();
+        $this->checkPermission('users.index');
+
+        $search = $request->query('search');
+        $rolId = $request->query('rol_id');
+        $estadoCuenta = $request->query('estado_cuenta');
+        $sexo = $request->query('sexo');
+        $cargarTodos = $request->boolean('cargar_todos') || $request->query('cargar_todos') === '1';
+
+        $hasFilters = $search || $rolId || $estadoCuenta || $sexo || $cargarTodos;
 
         $roles = Rol::all();
+
+        if ($hasFilters) {
+            $query = User::with([
+                'persona.estudiante', 
+                'rol'
+            ]);
+
+            if ($search) {
+                $query->where(function($q) use ($search) {
+                    $q->where('name', 'ilike', "%{$search}%")
+                      ->orWhere('email', 'ilike', "%{$search}%")
+                      ->orWhereHas('persona', function($pQuery) use ($search) {
+                          $pQuery->where('nombre', 'ilike', "%{$search}%")
+                                 ->orWhere('ap_paterno', 'ilike', "%{$search}%")
+                                 ->orWhere('ap_materno', 'ilike', "%{$search}%")
+                                 ->orWhere('ci', 'like', "%{$search}%");
+                      });
+                });
+            }
+
+            if ($rolId) {
+                $query->where('rol_id', $rolId);
+            }
+
+            if ($estadoCuenta) {
+                $query->where('estado_cuenta', $estadoCuenta);
+            }
+
+            if ($sexo) {
+                $query->whereHas('persona', function($q) use ($sexo) {
+                    $q->where('sexo', $sexo);
+                });
+            }
+
+            $users = $query->latest()->get();
+        } else {
+            $users = [];
+        }
 
         return Inertia::render('Admin/Users/Index', [
             'users' => $users,
@@ -37,6 +80,7 @@ class UserController extends Controller
 
     public function store(Request $request)
     {
+        $this->checkPermission('users.index');
         $request->validate([
             'ci' => 'required|string|unique:personas,ci',
             'nombre' => 'required|string',
@@ -74,6 +118,7 @@ class UserController extends Controller
 
     public function update(Request $request, User $user)
     {
+        $this->checkPermission('users.index');
         $request->validate([
             'nombre' => 'required|string',
             'ap_paterno' => 'required|string',
@@ -109,12 +154,14 @@ class UserController extends Controller
 
     public function aprobarCuenta(User $user)
     {
+        $this->checkPermission('users.index');
         $user->update(['estado_cuenta' => 'Aprobado']);
         return redirect()->back()->with('success', 'Cuenta de usuario aprobada exitosamente.');
     }
 
     public function aprobarCuentasMasivo(Request $request)
     {
+        $this->checkPermission('users.index');
         $request->validate([
             'user_ids' => 'required|array',
             'user_ids.*' => 'exists:users,id'
@@ -127,6 +174,7 @@ class UserController extends Controller
 
     public function resetPassword(Request $request, User $user)
     {
+        $this->checkPermission('users.index');
         $request->validate([
             'password' => 'required|string|min:8|confirmed',
         ]);
@@ -140,6 +188,7 @@ class UserController extends Controller
 
     public function destroy(Request $request, User $user)
     {
+        $this->checkPermission('users.index');
         $request->validate([
             'password' => 'required|string',
         ]);

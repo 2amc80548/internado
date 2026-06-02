@@ -125,7 +125,92 @@ Route::middleware('auth')->group(function () {
     })->name('superadmin.dashboard');
 
     Route::get('/encargada/dashboard', function () {
-        return Inertia::render('Dashboard', ['role' => 'Encargada']);
+        if (auth()->user()->rol?->nombre === 'Encargada') {
+            $config = \App\Models\ConfiguracionSistema::first();
+            $permisos = $config ? ($config->permisos_encargada ?? []) : [];
+            if (!in_array('dashboard', $permisos)) {
+                if (empty($permisos)) {
+                    abort(403, 'No tiene ningún módulo asignado.');
+                }
+                
+                $routeMap = [
+                    'estudiantes.index' => 'estudiantes.index',
+                    'users.index' => 'users.index',
+                    'comunidades.index' => 'comunidades.index',
+                    'cursos.index' => 'cursos.index',
+                    'cursos-bth.index' => 'cursos-bth.index',
+                    'mensualidades.index' => 'mensualidades.index',
+                    'incidencias.index' => 'incidencias.index',
+                ];
+                
+                foreach ($permisos as $p) {
+                    if (isset($routeMap[$p])) {
+                        return redirect()->route($routeMap[$p]);
+                    }
+                }
+                abort(403, 'No tiene permiso para acceder al Dashboard.');
+            }
+        }
+
+        $activeStudents = Estudiante::where('estado_global', 'Activo')->count();
+        $bachilleresCount = Estudiante::where('estado_global', 'Bachiller')->count();
+        $graduadosBthCount = Estudiante::where('estado_global', 'Graduado BTH')->count();
+        $pendingAccounts = \App\Models\User::where('estado_cuenta', 'Pendiente')->count();
+        
+        $montoTotalRecaudado = (float)\App\Models\Mensualidad::where('estado', 'Pagado')->sum('monto');
+        $pendingPayments = \App\Models\Mensualidad::whereIn('estado', ['Pendiente', 'Pendiente_Verificacion'])->count();
+        $totalPayments = \App\Models\Mensualidad::count();
+        $paidPayments = \App\Models\Mensualidad::where('estado', 'Pagado')->count();
+        
+        $porcentajeCobro = $totalPayments > 0 ? round(($paidPayments / $totalPayments) * 100) : 0;
+        
+        $recentInscriptions = RegistroInternado::with(['estudiante.persona', 'gestion'])->latest()->take(5)->get();
+        $recentPayments = Mensualidad::with(['registroInternado.estudiante.persona'])->where('estado', 'Pendiente_Verificacion')->latest()->take(5)->get();
+
+        $currentYear = date('Y');
+        $currentYearPaid = \App\Models\Mensualidad::where('estado', 'Pagado')
+            ->whereYear('fecha_pago', $currentYear)
+            ->get();
+        
+        $mesesNombres = [
+            1 => 'Ene', 2 => 'Feb', 3 => 'Mar', 4 => 'Abr', 5 => 'May', 6 => 'Jun',
+            7 => 'Jul', 8 => 'Ago', 9 => 'Sep', 10 => 'Oct', 11 => 'Nov', 12 => 'Dic'
+        ];
+        
+        $recaudacionMensual = [];
+        foreach ($mesesNombres as $num => $nom) {
+            $recaudacionMensual[] = [
+                'mes' => $nom,
+                'total' => 0
+            ];
+        }
+        
+        foreach ($currentYearPaid as $mnd) {
+            if ($mnd->fecha_pago) {
+                $monthNum = (int)date('n', strtotime($mnd->fecha_pago));
+                if ($monthNum >= 1 && $monthNum <= 12) {
+                    $recaudacionMensual[$monthNum - 1]['total'] += (float)$mnd->monto;
+                }
+            }
+        }
+
+        return Inertia::render('Admin/Dashboard', [
+            'role' => 'Encargada',
+            'metrics' => [
+                'activeStudents' => $activeStudents,
+                'bachilleresCount' => $bachilleresCount,
+                'graduadosBthCount' => $graduadosBthCount,
+                'pendingAccounts' => $pendingAccounts,
+                'montoTotalRecaudado' => $montoTotalRecaudado,
+                'pendingPayments' => $pendingPayments,
+                'totalPayments' => $totalPayments,
+                'paidPayments' => $paidPayments,
+                'porcentajeCobro' => $porcentajeCobro,
+                'recaudacionMensual' => $recaudacionMensual
+            ],
+            'recentInscriptions' => $recentInscriptions,
+            'recentPayments' => $recentPayments,
+        ]);
     })->name('encargada.dashboard');
 
     Route::get('/estudiante/portal', function () {

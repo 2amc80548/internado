@@ -19,25 +19,76 @@ use Illuminate\Support\Facades\Storage;
 
 class EstudianteController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
         $this->checkPermission('estudiantes.index');
 
-        $estudiantes = Estudiante::with([
-            'persona',
-            'comunidad.provincia',
-            'tutor.persona',
-            'registrosInternado.curso',
-            'registrosInternado.cursoBth.carreraTecnica',
-            'registrosInternado.gestion',
-            'registrosInternado.boletines'
-        ])->get();
+        $search = $request->query('search');
+        $cursoId = $request->query('curso_id');
+        $comunidadId = $request->query('comunidad_id');
+        $estadoGlobal = $request->query('estado_global');
+        $sexo = $request->query('sexo');
+        $pabellon = $request->query('pabellon');
+        $cargarTodos = $request->boolean('cargar_todos') || $request->query('cargar_todos') === '1';
+
+        $hasFilters = $search || $cursoId || $comunidadId || $estadoGlobal || $sexo || $pabellon || $cargarTodos;
 
         $cursos = Curso::all();
         $cursosBth = CursoBth::with('carreraTecnica')->get();
         $provincias = Provincia::with('comunidades')->get();
         $comunidades = Comunidad::with('provincia')->get();
         $gestiones = Gestion::orderBy('nombre_gestion', 'desc')->get();
+
+        if ($hasFilters) {
+            $query = Estudiante::with([
+                'persona',
+                'comunidad.provincia',
+                'tutor.persona',
+                'registrosInternado.curso',
+                'registrosInternado.cursoBth.carreraTecnica',
+                'registrosInternado.gestion',
+                'registrosInternado.boletines'
+            ]);
+
+            if ($search) {
+                $query->whereHas('persona', function($q) use ($search) {
+                    $q->where('nombre', 'ilike', "%{$search}%")
+                      ->orWhere('ap_paterno', 'ilike', "%{$search}%")
+                      ->orWhere('ap_materno', 'ilike', "%{$search}%")
+                      ->orWhere('ci', 'like', "%{$search}%");
+                });
+            }
+
+            if ($comunidadId) {
+                $query->where('comunidad_id', $comunidadId);
+            }
+
+            if ($cursoId) {
+                $query->whereHas('registrosInternado', function($q) use ($cursoId) {
+                    $q->where('curso_id', $cursoId);
+                });
+            }
+
+            if ($estadoGlobal) {
+                $query->where('estado_global', $estadoGlobal);
+            }
+
+            if ($sexo) {
+                $query->whereHas('persona', function($q) use ($sexo) {
+                    $q->where('sexo', $sexo);
+                });
+            }
+
+            if ($pabellon) {
+                $query->whereHas('registrosInternado', function($q) use ($pabellon) {
+                    $q->where('pabellon', $pabellon);
+                });
+            }
+
+            $estudiantes = $query->get();
+        } else {
+            $estudiantes = [];
+        }
 
         return Inertia::render('Admin/Estudiantes/Index', [
             'estudiantes' => $estudiantes,

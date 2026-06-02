@@ -69,7 +69,10 @@ const submitForm = () => {
 };
 
 const availablePermissions = [
+    { value: 'dashboard', name: 'Dashboard / Inicio', description: 'Acceso a la vista principal y métricas generales.' },
     { value: 'estudiantes.index', name: 'Estudiantes', description: 'Registro, edición, y trayectoria escolar de estudiantes.' },
+    { value: 'users.index', name: 'Usuarios y Roles', description: 'Gestión de accesos, aprobación de cuentas y roles.' },
+    { value: 'comunidades.index', name: 'Comunidades', description: 'Gestión de comunidades y procedencias de estudiantes.' },
     { value: 'cursos.index', name: 'Grados Regulares', description: 'Gestión de paralelos y grados de educación regular.' },
     { value: 'cursos-bth.index', name: 'Cursos BTH', description: 'Gestión de especialidades técnicas de BTH.' },
     { value: 'mensualidades.index', name: 'Mensualidades (Pagos)', description: 'Gestión y verificación de cobros y deudas de estudiantes.' },
