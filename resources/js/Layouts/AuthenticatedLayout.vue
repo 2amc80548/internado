@@ -26,7 +26,17 @@ const getRoleName = () => {
     return page.props.auth.user?.rol?.nombre || 'Usuario';
 };
 
-const menuItems = [
+const hasPermission = (route) => {
+    const role = getRoleName();
+    if (role === 'Superadmin') return true;
+    if (role === 'Encargada') {
+        const permisos = page.props.configuracion?.permisos_encargada || [];
+        return permisos.includes(route);
+    }
+    return false;
+};
+
+const menuItems = computed(() => [
     {
         name: 'Dashboard',
         route: 'dashboard',
@@ -37,7 +47,7 @@ const menuItems = [
         name: 'Estudiantes',
         route: 'estudiantes.index',
         icon: 'M12 14l9-5-9-5-9 5 9 5z M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z',
-        show: getRoleName() === 'Superadmin' || getRoleName() === 'Encargada'
+        show: hasPermission('estudiantes.index')
     },
     {
         name: 'Usuarios y Roles',
@@ -55,19 +65,25 @@ const menuItems = [
         name: 'Grados Regulares',
         route: 'cursos.index',
         icon: 'M12 14l9-5-9-5-9 5 9 5z M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z',
-        show: getRoleName() === 'Superadmin' || getRoleName() === 'Encargada'
+        show: hasPermission('cursos.index')
     },
     {
         name: 'Cursos BTH',
         route: 'cursos-bth.index',
         icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z',
-        show: getRoleName() === 'Superadmin' || getRoleName() === 'Encargada'
+        show: hasPermission('cursos-bth.index')
     },
     {
         name: 'Mensualidades (Pagos)',
         route: 'mensualidades.index',
         icon: 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
-        show: getRoleName() === 'Superadmin' || getRoleName() === 'Encargada'
+        show: hasPermission('mensualidades.index')
+    },
+    {
+        name: 'Incidencias',
+        route: 'incidencias.index',
+        icon: 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z',
+        show: hasPermission('incidencias.index')
     },
     {
         name: 'Configuración Sistema',
@@ -75,13 +91,46 @@ const menuItems = [
         icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z',
         show: getRoleName() === 'Superadmin'
     }
-];
+]);
 
-const visibleMenuItems = menuItems.filter(item => item.show);
+const visibleMenuItems = computed(() => menuItems.value.filter(item => item.show));
+
+const dynamicStyle = computed(() => {
+    const color = page.props.configuracion?.color_hexadecimal || '#0d9488';
+    return `
+        :root {
+            --theme-primary: ${color};
+            --theme-primary-hover: ${color}dd;
+            --theme-primary-light: ${color}22;
+        }
+        .theme-primary-bg {
+            background-color: var(--theme-primary) !important;
+        }
+        .theme-primary-text {
+            color: var(--theme-primary) !important;
+        }
+        .theme-primary-border {
+            border-color: var(--theme-primary) !important;
+        }
+        .theme-primary-hover-bg:hover {
+            background-color: var(--theme-primary-hover) !important;
+        }
+        .theme-primary-hover-text:hover {
+            color: var(--theme-primary) !important;
+        }
+        .theme-primary-active-bg {
+            background-color: var(--theme-primary-light) !important;
+        }
+        .focus-ring-primary:focus {
+            --tw-ring-color: var(--theme-primary) !important;
+        }
+    `;
+});
 </script>
 
 <template>
     <div class="min-h-screen bg-gray-50 flex">
+        <component :is="'style'">{{ dynamicStyle }}</component>
         
         <!-- Sidebar Navigation -->
         <aside class="fixed inset-y-0 left-0 bg-gray-900 w-64 shadow-xl z-50 transform transition-transform duration-300 flex flex-col justify-between"
@@ -90,10 +139,13 @@ const visibleMenuItems = menuItems.filter(item => item.show);
             <div class="flex flex-col flex-1">
                 <div class="flex items-center justify-between h-20 border-b border-gray-800 px-6">
                     <Link :href="route('dashboard')" class="flex items-center gap-3">
-                        <div class="bg-teal-500 text-white p-2 rounded-lg">
+                        <div v-if="$page.props.configuracion?.ruta_logo" class="h-10 w-10 shrink-0 flex items-center justify-center bg-white/5 p-1 rounded-lg">
+                            <img :src="`/storage/${$page.props.configuracion.ruta_logo}`" alt="Logo" class="max-h-8 max-w-8 object-contain rounded">
+                        </div>
+                        <div v-else class="text-white p-2 rounded-lg theme-primary-bg">
                             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg>
                         </div>
-                        <span class="text-white font-bold text-xl tracking-wider">INTERNADO</span>
+                        <span class="text-white font-bold text-lg tracking-wider uppercase truncate max-w-[130px]">{{ $page.props.configuracion?.nombre_sistema || 'INTERNADO' }}</span>
                     </Link>
                     <button @click="showingNavigationSidebar = false" class="md:hidden text-gray-400 hover:text-white">
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
@@ -103,89 +155,84 @@ const visibleMenuItems = menuItems.filter(item => item.show);
                 <nav class="mt-6 px-4 space-y-2 overflow-y-auto flex-1">
                     <template v-for="item in visibleMenuItems" :key="item.name">
                         <Link :href="item.route && route().has(item.route) ? route(item.route) : '#'"
-                            :class="[route().current(item.route) ? 'bg-gray-800 text-teal-400 font-extrabold' : 'text-gray-300 hover:bg-gray-800 hover:text-white font-medium', 'group flex items-center px-4 py-3 text-sm rounded-xl transition-all duration-200']">
-                            <svg class="mr-3 flex-shrink-0 h-5 w-5" :class="[route().current(item.route) ? 'text-teal-400' : 'text-gray-400 group-hover:text-white']" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            :class="[route().current(item.route) ? 'bg-gray-800 theme-primary-text font-extrabold shadow-sm' : 'text-gray-300 hover:bg-gray-800 hover:text-white font-medium', 'group flex items-center px-4 py-3 text-sm rounded-xl transition-all duration-200']">
+                            <svg class="mr-3 flex-shrink-0 h-5 w-5 animate-pulse-slow" :class="[route().current(item.route) ? 'theme-primary-text' : 'text-gray-400 group-hover:text-white']" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" :d="item.icon" />
                             </svg>
                             {{ item.name }}
                         </Link>
                         
                         <!-- If this item is Dashboard and the user is a Student, render the active student tabs underneath -->
-                        <div v-if="item.name === 'Dashboard' && getRoleName() === 'Estudiante' && $page.props.auth.estudiante?.estado_global !== 'Bachiller'" class="pl-4 space-y-0.5 border-l border-gray-800 ml-6 mt-1 mb-2">
+                        <div v-if="item.name === 'Dashboard' && getRoleName() === 'Estudiante' && $page.props.auth.estudiante?.estado_global !== 'Bachiller'" class="pl-4 space-y-1.5 border-l border-gray-800 ml-6 mt-2 mb-3">
                             <button @click="selectTab('resumen')" 
-                                :class="activeTab === 'resumen' ? 'text-teal-400 font-black bg-gray-800/60 shadow-sm border-l-2 border-teal-500' : 'text-gray-400 hover:bg-gray-800/20 hover:text-white font-bold border-l-2 border-transparent'" 
-                                class="w-full flex items-center px-3.5 py-2 text-xs rounded-r-lg transition-all duration-200 gap-2 text-left">
-                                <span>📊</span> Mi Resumen
+                                :class="[activeTab === 'resumen' ? 'bg-gray-800 theme-primary-text font-extrabold' : 'text-gray-300 hover:bg-gray-800 hover:text-white font-medium', 'w-full flex items-center px-4 py-3 text-sm rounded-xl transition-all duration-200 text-left']">
+                                <svg class="mr-3 flex-shrink-0 h-5 w-5" :class="[activeTab === 'resumen' ? 'theme-primary-text' : 'text-gray-400 group-hover:text-white']" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                                </svg>
+                                Mi Resumen
                             </button>
                             <button @click="selectTab('finanzas')" 
-                                :class="activeTab === 'finanzas' ? 'text-teal-400 font-black bg-gray-800/60 shadow-sm border-l-2 border-teal-500' : 'text-gray-400 hover:bg-gray-800/20 hover:text-white font-bold border-l-2 border-transparent'" 
-                                class="w-full flex items-center px-3.5 py-2 text-xs rounded-r-lg transition-all duration-200 gap-2 text-left">
-                                <span>💰</span> Mensualidad
+                                :class="[activeTab === 'finanzas' ? 'bg-gray-800 theme-primary-text font-extrabold' : 'text-gray-300 hover:bg-gray-800 hover:text-white font-medium', 'w-full flex items-center px-4 py-3 text-sm rounded-xl transition-all duration-200 text-left']">
+                                <svg class="mr-3 flex-shrink-0 h-5 w-5" :class="[activeTab === 'finanzas' ? 'theme-primary-text' : 'text-gray-400 group-hover:text-white']" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                Mensualidad
                             </button>
                             <button @click="selectTab('academico')" 
-                                :class="activeTab === 'academico' ? 'text-teal-400 font-black bg-gray-800/60 shadow-sm border-l-2 border-teal-500' : 'text-gray-400 hover:bg-gray-800/20 hover:text-white font-bold border-l-2 border-transparent'" 
-                                class="w-full flex items-center px-3.5 py-2 text-xs rounded-r-lg transition-all duration-200 gap-2 text-left">
-                                <span>📚</span> Boletines
+                                :class="[activeTab === 'academico' ? 'bg-gray-800 theme-primary-text font-extrabold' : 'text-gray-300 hover:bg-gray-800 hover:text-white font-medium', 'w-full flex items-center px-4 py-3 text-sm rounded-xl transition-all duration-200 text-left']">
+                                <svg class="mr-3 flex-shrink-0 h-5 w-5" :class="[activeTab === 'academico' ? 'theme-primary-text' : 'text-gray-400 group-hover:text-white']" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                                </svg>
+                                Boletines
                             </button>
                             <button @click="selectTab('trayectoria')" 
-                                :class="activeTab === 'trayectoria' ? 'text-teal-400 font-black bg-gray-800/60 shadow-sm border-l-2 border-teal-500' : 'text-gray-400 hover:bg-gray-800/20 hover:text-white font-bold border-l-2 border-transparent'" 
-                                class="w-full flex items-center px-3.5 py-2 text-xs rounded-r-lg transition-all duration-200 gap-2 text-left">
-                                <span>🎓</span> Trayectoria
+                                :class="[activeTab === 'trayectoria' ? 'bg-gray-800 theme-primary-text font-extrabold' : 'text-gray-300 hover:bg-gray-800 hover:text-white font-medium', 'w-full flex items-center px-4 py-3 text-sm rounded-xl transition-all duration-200 text-left']">
+                                <svg class="mr-3 flex-shrink-0 h-5 w-5" :class="[activeTab === 'trayectoria' ? 'theme-primary-text' : 'text-gray-400 group-hover:text-white']" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 14l9-5-9-5-9 5 9 5zm0 0l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z" />
+                                </svg>
+                                Trayectoria
                             </button>
                         </div>
                     </template>
                 </nav>
-            </div>
-
-            <!-- Sidebar Footer: Profile and Logout (Only for non-students) -->
-            <div v-if="getRoleName() !== 'Estudiante'" class="p-4 border-t border-gray-800 bg-gray-950/50">
-                <div class="flex items-center gap-3 mb-4">
-                    <div class="h-10 w-10 rounded-full bg-gradient-to-r from-teal-500 to-blue-600 flex items-center justify-center text-white font-bold shadow-md shrink-0">
-                        {{ $page.props.auth.user.name.charAt(0) }}
-                    </div>
-                    <div class="text-left overflow-hidden">
-                        <p class="text-sm font-bold text-gray-200 leading-tight truncate">{{ $page.props.auth.user.name }}</p>
-                        <p class="text-xs text-teal-400 font-medium truncate">{{ getRoleName() }}</p>
-                    </div>
-                </div>
-                <div class="flex flex-col gap-2">
-                    <Link :href="route('profile.edit')" class="flex items-center justify-center gap-2 w-full py-2 px-4 rounded-xl text-sm font-semibold text-gray-300 bg-gray-800 hover:bg-gray-700 hover:text-white transition-all duration-200">
-                        <span>👤</span> Mi Perfil
-                    </Link>
-                    <Link :href="route('logout')" method="post" as="button" class="flex items-center justify-center gap-2 w-full py-2 px-4 rounded-xl text-sm font-semibold text-red-400 bg-red-500/10 hover:bg-red-500 hover:text-white border border-red-500/20 transition-all duration-200">
-                        <span>🚪</span> Salir
-                    </Link>
-                </div>
             </div>
         </aside>
 
         <!-- Main Content Wrapper -->
         <div class="flex-1 flex flex-col transition-all duration-300"
             :class="{ 'md:ml-64': showingNavigationSidebar, 'md:ml-0': !showingNavigationSidebar }">
-            <!-- Topbar (Mobile Hamburger & Quick Actions) -->
+            <!-- Topbar -->
             <header class="bg-white shadow-sm border-b border-gray-200 h-16 flex items-center justify-between px-4 sm:px-6 lg:px-8 z-40 sticky top-0">
                 <div class="flex items-center justify-between w-full">
                     <div class="flex items-center">
-                        <button @click="showingNavigationSidebar = !showingNavigationSidebar" class="p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none transition-colors">
+                        <button @click="showingNavigationSidebar = !showingNavigationSidebar" class="p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none transition-colors mr-2">
                             <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
                         </button>
                         <!-- Slot for dynamic header titles -->
-                        <div class="hidden md:block ml-4">
+                        <div class="hidden md:block ml-2">
                             <slot name="header" />
                         </div>
                     </div>
                     
-                    <!-- Student specific topbar user actions -->
-                    <div v-if="getRoleName() === 'Estudiante'" class="flex items-center gap-2 sm:gap-4 shrink-0">
-                        <span class="hidden md:inline text-sm font-semibold text-gray-700">
-                            {{ $page.props.auth.user.name }}
-                        </span>
-                        <div class="flex items-center gap-1.5 sm:gap-2">
-                            <Link :href="route('profile.edit')" class="text-xs font-bold text-gray-600 hover:text-teal-600 bg-gray-100 hover:bg-teal-50 px-2 sm:px-3 py-1.5 rounded-lg transition-all duration-200">
-                                👤 <span class="hidden sm:inline">Mi Perfil</span>
+                    <!-- Unified topbar user actions -->
+                    <div class="flex items-center gap-3 sm:gap-4 shrink-0">
+                        <div class="flex flex-col text-right hidden sm:block">
+                            <span class="text-sm font-bold text-gray-800 leading-tight block">
+                                {{ $page.props.auth.user.name }}
+                            </span>
+                            <span class="text-xs font-semibold theme-primary-text tracking-wider uppercase block mt-0.5">
+                                {{ getRoleName() }}
+                            </span>
+                        </div>
+                        <div class="h-9 w-9 rounded-full bg-gradient-to-tr from-gray-800 to-gray-700 theme-primary-bg flex items-center justify-center text-white font-extrabold shadow-sm text-sm shrink-0 border border-white/20 uppercase">
+                            {{ $page.props.auth.user.name.charAt(0) }}
+                        </div>
+                        <div class="flex items-center gap-1.5 sm:gap-2 border-l border-gray-200 pl-3">
+                            <Link :href="route('profile.edit')" class="text-xs font-bold text-gray-600 hover:text-white hover:theme-primary-bg bg-gray-50 hover:shadow-sm px-2.5 sm:px-3 py-1.5 rounded-lg border border-gray-200 transition-all duration-250 flex items-center gap-1">
+                                <span>👤</span> <span class="hidden md:inline">Mi Perfil</span>
                             </Link>
-                            <Link :href="route('logout')" method="post" as="button" class="text-xs font-bold text-red-600 hover:text-white bg-red-50 hover:bg-red-500 px-2 sm:px-3 py-1.5 rounded-lg border border-red-100 hover:border-red-500 transition-all duration-200">
-                                🚪 <span class="hidden sm:inline">Salir</span>
+                            <Link :href="route('logout')" method="post" as="button" class="text-xs font-bold text-red-600 hover:text-white hover:bg-red-500 bg-red-50 hover:shadow-sm px-2.5 sm:px-3 py-1.5 rounded-lg border border-red-200 hover:border-red-500 transition-all duration-200 flex items-center gap-1">
+                                <span>🚪</span> <span class="hidden md:inline">Salir</span>
                             </Link>
                         </div>
                     </div>

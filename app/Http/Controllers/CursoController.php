@@ -10,6 +10,7 @@ class CursoController extends Controller
 {
     public function index()
     {
+        $this->checkPermission('cursos.index');
         $cursos = Curso::withCount('registrosInternado')->get();
         return Inertia::render('Admin/Cursos/Index', [
             'cursos' => $cursos
@@ -18,6 +19,7 @@ class CursoController extends Controller
 
     public function store(Request $request)
     {
+        $this->checkPermission('cursos.index');
         $request->validate(['nombre' => 'required|string|unique:cursos,nombre']);
         Curso::create($request->all());
         return redirect()->back()->with('success', 'Curso creado exitosamente.');
@@ -25,6 +27,7 @@ class CursoController extends Controller
 
     public function update(Request $request, Curso $curso)
     {
+        $this->checkPermission('cursos.index');
         $request->validate(['nombre' => 'required|string|unique:cursos,nombre,'.$curso->id]);
         $curso->update($request->all());
         return redirect()->back()->with('success', 'Curso actualizado exitosamente.');
@@ -32,6 +35,7 @@ class CursoController extends Controller
 
     public function destroy(Curso $curso)
     {
+        $this->checkPermission('cursos.index');
         $curso->delete();
         return redirect()->back()->with('success', 'Curso eliminado exitosamente.');
     }

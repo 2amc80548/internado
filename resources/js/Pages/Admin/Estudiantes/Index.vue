@@ -2,6 +2,7 @@
 import { Head, useForm, router } from '@inertiajs/vue3';
 import { ref, computed, onMounted } from 'vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import CameraCropModal from '@/Components/CameraCropModal.vue';
 import axios from 'axios';
 
 const props = defineProps<{
@@ -26,6 +27,7 @@ const selectedGestionIdForNotes = ref<number | string>('');
 const subiendoBoletinAdmin = ref(false);
 const subiendoBoletinPeriodo = ref<number | null>(null);
 const filterCursoWizard = ref('');
+const showCameraCropModal = ref(false);
 
 // Filtros avanzados
 const filter = ref({
@@ -491,6 +493,32 @@ const adminSubirFoto = (e: Event) => {
     }
 };
 
+const adminGuardarFotoRecortada = (file: File) => {
+    if (!form.id) return;
+    subiendoFoto.value = true;
+    
+    const fileFormData = new FormData();
+    fileFormData.append('foto', file);
+
+    axios.post(route('estudiantes.foto', form.id), fileFormData, {
+        headers: {
+            'Content-Type': 'multipart/form-data'
+        }
+    }).then(response => {
+        form.ruta_foto = response.data.ruta_foto;
+        const estIdx = props.estudiantes.findIndex(e => e.id === form.id);
+        if (estIdx !== -1) {
+            props.estudiantes[estIdx].ruta_foto = response.data.ruta_foto;
+        }
+        alert('Foto de perfil actualizada correctamente');
+    }).catch(err => {
+        console.error(err);
+        alert('Error al subir la foto de perfil: ' + (err.response?.data?.message || err.message));
+    }).finally(() => {
+        subiendoFoto.value = false;
+    });
+};
+
 const activeGestion = computed(() => {
     return props.gestiones ? props.gestiones.find((g: any) => g.estado === 'Activo') : null;
 });
@@ -657,11 +685,11 @@ const handleStatusChange = (index: number) => {
     const regs = est?.registrosInternado || est?.registros_internado || [];
     const regSource = regs.find((r: any) => String(r.gestion_id) === String(selectedSourceGestionId.value));
     
-    if (row.estado_anual === 'Reprobado') {
-        row.curso_id = regSource?.curso_id || '';
-    } else if (row.estado_anual === 'Retirado') {
+    if (row.estado_anual.includes('Retirado')) {
         row.curso_id = '';
         row.curso_bth_id = '';
+    } else if (row.estado_anual === 'Reprobado') {
+        row.curso_id = regSource?.curso_id || '';
     } else if (row.estado_anual === 'Aprobado') {
         const currentCursoId = regSource?.curso_id || '';
         let nextCursoId = currentCursoId;
@@ -692,7 +720,7 @@ const submitPromotion = () => {
     }
 
     // Validar motivo de retiro
-    const missingMotivo = selectedPromoList.find(p => p.estado_anual === 'Retirado' && !p.motivo_retiro);
+    const missingMotivo = selectedPromoList.find(p => p.estado_anual.includes('Retirado') && !p.motivo_retiro);
     if (missingMotivo) {
         alert(`Por favor especifique el Motivo de Retiro para ${missingMotivo.nombre_completo}.`);
         return;
@@ -986,11 +1014,10 @@ const submitAnular = () => {
                                                 <h4 class="font-bold text-gray-800 text-sm mb-1">Fotografía del Alumno</h4>
                                                 <p class="text-xs text-gray-500 mb-3">Recomendable fondo claro. Formato JPG o PNG, máximo 2MB.</p>
                                                 <div class="flex flex-wrap gap-2 justify-center sm:justify-start">
-                                                    <label class="cursor-pointer bg-teal-600 hover:bg-teal-700 text-white font-bold py-1.5 px-3 rounded-lg text-xs transition shadow-sm">
-                                                        <span>📷 Subir Nueva Foto</span>
-                                                        <input type="file" class="hidden" accept="image/*" @change="adminSubirFoto">
-                                                    </label>
-                                                    <span v-if="subiendoFoto" class="text-xs text-teal-600 font-bold self-center animate-pulse">Subiendo...</span>
+                                                    <button @click="showCameraCropModal = true" type="button" class="bg-teal-600 hover:bg-teal-700 text-white font-bold py-1.5 px-3 rounded-lg text-xs transition shadow-sm flex items-center gap-1.5">
+                                                        📷 Actualizar Foto (Cámara / Archivo)
+                                                    </button>
+                                                    <span v-if="subiendoFoto" class="text-xs text-teal-600 font-bold self-center animate-pulse">Procesando...</span>
                                                 </div>
                                             </div>
                                         </div>
@@ -1239,17 +1266,30 @@ const submitAnular = () => {
                                 <div class="mt-6 border-t pt-4">
                                     <h4 class="font-bold text-gray-800 text-xs uppercase tracking-wider mb-3">📜 Trayectoria y Registro de Gestión</h4>
                                     <div class="space-y-2 max-h-40 overflow-y-auto">
-                                        <div v-for="reg in sortedRegistrations(selectedEstudiante)" :key="reg.id" class="p-2.5 bg-gray-50 border rounded-xl text-xs flex justify-between items-center">
-                                            <div>
-                                                <span class="font-bold text-teal-700 bg-teal-50 border px-1.5 py-0.5 rounded mr-2">Gestión {{ reg.gestion?.nombre_gestion }}</span>
-                                                <strong class="text-gray-800">{{ reg.curso?.nombre || 'S/N' }}</strong>
-                                                <span class="text-gray-400 mx-1">&bull;</span>
-                                                <span class="text-gray-500">BTH: {{ reg.curso_bth?.carrera_tecnica?.nombre || 'Ninguno' }}</span>
-                                            </div>
-                                            <span class="font-black uppercase tracking-wider text-[10px] text-green-800 bg-green-100 border px-2 py-0.5 rounded-full">
-                                                {{ reg.estado_anual }}
-                                            </span>
-                                        </div>
+                                        <div v-for="reg in sortedRegistrations(selectedEstudiante)" :key="reg.id" class="p-2.5 bg-gray-50 border rounded-xl text-xs flex flex-col gap-1">
+                                             <div class="flex justify-between items-center w-full">
+                                                 <div>
+                                                     <span class="font-bold text-teal-700 bg-teal-50 border px-1.5 py-0.5 rounded mr-2">Gestión {{ reg.gestion?.nombre_gestion }}</span>
+                                                     <strong class="text-gray-800">{{ reg.curso?.nombre || 'S/N' }}</strong>
+                                                     <span class="text-gray-400 mx-1">&bull;</span>
+                                                     <span class="text-gray-500">BTH: {{ reg.curso_bth?.carrera_tecnica?.nombre || 'Ninguno' }}</span>
+                                                 </div>
+                                                 <span class="font-black uppercase tracking-wider text-[10px] border px-2 py-0.5 rounded-full"
+                                                       :class="{
+                                                           'text-green-800 bg-green-100 border-green-200': reg.estado_anual === 'Aprobado',
+                                                           'text-red-800 bg-red-100 border-red-200': reg.estado_anual === 'Reprobado',
+                                                           'text-rose-800 bg-rose-100 border-rose-200': reg.estado_anual === 'Retirado',
+                                                           'text-indigo-800 bg-indigo-100 border-indigo-200': reg.estado_anual === 'Aprobado y Retirado',
+                                                           'text-orange-800 bg-orange-100 border-orange-200': reg.estado_anual === 'Reprobado y Retirado',
+                                                           'text-yellow-800 bg-yellow-100 border-yellow-200': reg.estado_anual === 'Cursando'
+                                                       }">
+                                                     {{ reg.estado_anual }}
+                                                 </span>
+                                             </div>
+                                             <div v-if="reg.motivo_retiro" class="text-[10px] text-rose-700 bg-rose-50/50 border border-rose-100 p-1.5 rounded-lg mt-1 font-medium">
+                                                 <strong>Motivo de Retiro:</strong> {{ reg.motivo_retiro }}
+                                             </div>
+                                         </div>
                                     </div>
                                 </div>
                             </div>
@@ -1454,7 +1494,9 @@ const submitAnular = () => {
                                                         <select v-else v-model="p.estado_anual" @change="handleStatusChange(index)" class="border-gray-300 rounded-lg text-xs py-1 focus:ring-teal-500 focus:border-teal-500 bg-slate-50 font-bold">
                                                             <option value="Aprobado">Aprobado</option>
                                                             <option value="Reprobado">Reprobado</option>
-                                                            <option value="Retirado">Sin Inscripción (Retirado)</option>
+                                                            <option value="Retirado">Retirado</option>
+                                                            <option value="Aprobado y Retirado">Aprobado y Retirado</option>
+                                                            <option value="Reprobado y Retirado">Reprobado y Retirado</option>
                                                         </select>
                                                     </td>
                                                     <td class="px-4 py-2">
@@ -1466,13 +1508,13 @@ const submitAnular = () => {
                                                         </span>
                                                         <span v-else-if="p.alreadyPromoted" class="text-[10px] font-black text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded">Ya Promocionado</span>
                                                         <template v-else>
-                                                            <div v-if="p.estado_anual === 'Retirado'" class="space-y-1">
+                                                            <div v-if="p.estado_anual.includes('Retirado')" class="space-y-1">
                                                                 <input type="text" v-model="p.motivo_retiro" placeholder="Especificar Motivo de Retiro *" class="border-red-300 rounded-lg text-xs py-1 px-2 w-full bg-red-50 text-red-900 font-medium" required>
                                                             </div>
                                                             <span v-else-if="(p.curso_actual_nombre.includes('6to') || p.curso_actual_nombre.includes('Sexto')) && p.estado_anual === 'Aprobado'" class="text-xs px-2.5 py-1 rounded bg-indigo-100 text-indigo-800 border border-indigo-200 flex items-center gap-1 w-max font-black animate-pulse">
                                                                 🎓 Egresa Bachiller
                                                             </span>
-                                                            <select v-else v-model="p.curso_id" :disabled="p.estado_anual === 'Retirado'" class="border-gray-300 rounded-lg text-xs py-1 focus:ring-teal-500 focus:border-teal-500 max-w-[200px] font-black bg-white">
+                                                            <select v-else v-model="p.curso_id" :disabled="p.estado_anual.includes('Retirado')" class="border-gray-300 rounded-lg text-xs py-1 focus:ring-teal-500 focus:border-teal-500 max-w-[200px] font-black bg-white">
                                                                 <option value="">Ninguno</option>
                                                                 <option v-for="c in cursos" :key="c.id" :value="c.id">{{ c.nombre }}</option>
                                                             </select>
@@ -1597,5 +1639,7 @@ const submitAnular = () => {
 
             </div>
         </div>
+        
+        <CameraCropModal :show="showCameraCropModal" @close="showCameraCropModal = false" @cropped="adminGuardarFotoRecortada" />
     </AuthenticatedLayout>
 </template>

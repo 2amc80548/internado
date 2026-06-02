@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import CameraCropModal from '@/Components/CameraCropModal.vue';
 import { Head, useForm, usePage } from '@inertiajs/vue3';
 import { ref, computed, watch } from 'vue';
 
@@ -101,6 +102,8 @@ const notifyWhatsApp = () => {
     window.open(`https://wa.me/59163591312?text=${encodedMensaje}`, '_blank');
 };
 
+const showCameraCropModal = ref(false);
+
 const handleFotoChange = (e: Event) => {
     const target = e.target as HTMLInputElement;
     if (target.files && target.files[0]) {
@@ -114,6 +117,17 @@ const submitFoto = () => {
         preserveScroll: true,
         onSuccess: () => {
             fotoForm.reset();
+        }
+    });
+};
+
+const guardarFotoRecortada = (file: File) => {
+    fotoForm.foto = file;
+    fotoForm.post(route('estudiantes.foto', props.estudiante.id), {
+        preserveScroll: true,
+        onSuccess: () => {
+            fotoForm.reset();
+            alert('Foto de perfil actualizada correctamente.');
         }
     });
 };
@@ -263,21 +277,32 @@ const totalAnios = computed(() => {
                                             <svg class="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path></svg>
                                         </span>
                                         <div class="bg-gray-50 border border-gray-200 rounded-2xl p-4 hover:shadow-md hover:bg-white hover:border-teal-200 transition-all duration-300">
-                                            <div class="flex justify-between items-center gap-2 mb-2">
-                                                <div class="flex items-center gap-2">
-                                                    <span class="text-sm font-black text-teal-700 bg-teal-50 px-2 py-0.5 rounded-lg border border-teal-100">
-                                                        {{ reg.gestion?.nombre_gestion || 'S/N' }}
-                                                    </span>
-                                                    <h4 class="text-sm font-bold text-gray-800">{{ reg.curso?.nombre || 'Curso no Asignado' }}</h4>
-                                                </div>
-                                                <span class="bg-green-100 text-green-800 border-green-200 border px-2 py-0.5 text-[10px] font-black uppercase rounded-full">
-                                                    {{ reg.estado_anual }}
-                                                </span>
-                                            </div>
-                                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-gray-600">
-                                                <span><strong>BTH Carrera:</strong> {{ reg.curso_bth?.carrera_tecnica?.nombre || 'Ninguna' }}</span>
-                                                <span><strong>Habitación:</strong> {{ reg.pabellon || 'S/N' }} - Cama {{ reg.cama || 'S/N' }}</span>
-                                            </div>
+                                             <div class="flex justify-between items-center gap-2 mb-2">
+                                                 <div class="flex items-center gap-2">
+                                                     <span class="text-sm font-black text-teal-700 bg-teal-50 px-2 py-0.5 rounded-lg border border-teal-100">
+                                                         {{ reg.gestion?.nombre_gestion || 'S/N' }}
+                                                     </span>
+                                                     <h4 class="text-sm font-bold text-gray-800">{{ reg.curso?.nombre || 'Curso no Asignado' }}</h4>
+                                                 </div>
+                                                 <span class="border px-2 py-0.5 text-[10px] font-black uppercase rounded-full"
+                                                       :class="{
+                                                           'bg-green-100 text-green-800 border-green-200': reg.estado_anual === 'Aprobado',
+                                                           'bg-red-100 text-red-800 border-red-200': reg.estado_anual === 'Reprobado',
+                                                           'bg-rose-100 text-rose-800 border-rose-200': reg.estado_anual === 'Retirado',
+                                                           'bg-indigo-100 text-indigo-800 border-indigo-200': reg.estado_anual === 'Aprobado y Retirado',
+                                                           'bg-orange-100 text-orange-800 border-orange-200': reg.estado_anual === 'Reprobado y Retirado',
+                                                           'bg-yellow-100 text-yellow-800 border-yellow-200': reg.estado_anual === 'Cursando'
+                                                       }">
+                                                     {{ reg.estado_anual }}
+                                                 </span>
+                                             </div>
+                                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-gray-600">
+                                                 <span><strong>BTH Carrera:</strong> {{ reg.curso_bth?.carrera_tecnica?.nombre || 'Ninguna' }}</span>
+                                                 <span><strong>Habitación:</strong> {{ reg.pabellon || 'S/N' }} - Cama {{ reg.cama || 'S/N' }}</span>
+                                             </div>
+                                             <div v-if="reg.motivo_retiro" class="mt-2 text-[10px] text-rose-800 bg-rose-50 border border-rose-100 p-2 rounded-lg font-medium">
+                                                 <strong>Motivo de Retiro:</strong> {{ reg.motivo_retiro }}
+                                             </div>
                                         </div>
                                     </div>
                                 </div>
@@ -474,11 +499,17 @@ const totalAnios = computed(() => {
                                         <div class="absolute inset-0 opacity-15 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-white via-transparent to-transparent"></div>
                                     </div>
                                     <div class="px-6 pb-6 relative pt-16 flex flex-col md:flex-row items-center md:items-end gap-6">
-                                        <!-- Floating Profile Picture (Larger & Static) -->
-                                        <div class="absolute -top-20 left-1/2 md:left-8 transform -translate-x-1/2 md:translate-x-0 w-40 h-40 bg-white p-1.5 rounded-full shadow-md overflow-hidden shrink-0">
-                                            <div class="w-full h-full rounded-full overflow-hidden bg-gray-50 flex items-center justify-center border border-gray-200">
+                                        <!-- Floating Profile Picture with edit hover -->
+                                        <div class="absolute -top-20 left-1/2 md:left-8 transform -translate-x-1/2 md:translate-x-0 w-40 h-40 bg-white p-1.5 rounded-full shadow-md shrink-0 group/avatar">
+                                            <div class="w-full h-full rounded-full overflow-hidden bg-gray-50 flex items-center justify-center border border-gray-200 relative">
                                                 <img v-if="estudiante.ruta_foto" :src="estudiante.ruta_foto.startsWith('http') || estudiante.ruta_foto.startsWith('/') ? estudiante.ruta_foto : '/storage/' + estudiante.ruta_foto" class="w-full h-full object-cover">
                                                 <svg v-else class="w-16 h-16 text-gray-300" fill="currentColor" viewBox="0 0 24 24"><path d="M24 20.993V24H0v-2.996A14.977 14.977 0 0112.004 15c4.904 0 9.26 2.354 11.996 5.993zM16.002 8.999a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+                                                
+                                                <!-- Clickable overlay to edit profile photo -->
+                                                <button @click="showCameraCropModal = true" type="button" class="absolute inset-0 bg-black/60 opacity-0 group-hover/avatar:opacity-100 flex flex-col items-center justify-center text-white text-[10px] font-black uppercase tracking-wider transition-all duration-300 cursor-pointer">
+                                                    <svg class="w-6 h-6 mb-1 text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                                                    Editar Foto
+                                                </button>
                                             </div>
                                         </div>
                                         
@@ -734,7 +765,9 @@ const totalAnios = computed(() => {
                                                 'bg-teal-100 text-teal-800 border-teal-200': reg.estado_anual === 'Cursando',
                                                 'bg-green-100 text-green-800 border-green-200': reg.estado_anual === 'Aprobado',
                                                 'bg-red-100 text-red-800 border-red-200': reg.estado_anual === 'Reprobado',
-                                                'bg-gray-100 text-gray-600 border-gray-200': reg.estado_anual === 'Retirado'
+                                                'bg-rose-100 text-rose-800 border-rose-200': reg.estado_anual === 'Retirado',
+                                                'bg-indigo-100 text-indigo-800 border-indigo-200': reg.estado_anual === 'Aprobado y Retirado',
+                                                'bg-orange-100 text-orange-800 border-orange-200': reg.estado_anual === 'Reprobado y Retirado'
                                             }" class="px-3 py-1 border text-xs font-black uppercase tracking-wider rounded-full">
                                                 {{ reg.estado_anual }}
                                             </span>
@@ -754,6 +787,10 @@ const totalAnios = computed(() => {
                                                 <span><strong>Periodos:</strong> {{ reg.gestion?.tipo_periodo_academico }} ({{ reg.gestion?.cantidad_periodos }})</span>
                                             </div>
                                         </div>
+                                        
+                                        <div v-if="reg.motivo_retiro" class="mt-4 text-xs text-rose-800 bg-rose-50 border border-rose-100 p-3 rounded-xl font-medium">
+                                            <strong>Motivo de Retiro:</strong> {{ reg.motivo_retiro }}
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -764,6 +801,7 @@ const totalAnios = computed(() => {
         </div>
     </div>
 </div>
+        <CameraCropModal :show="showCameraCropModal" @close="showCameraCropModal = false" @cropped="guardarFotoRecortada" />
     </AuthenticatedLayout>
 </template>
 

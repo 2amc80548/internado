@@ -14,5 +14,13 @@ class ConfiguracionSistema extends Model
         'ruta_qr_pagos',
         'modo_mensualidad_automatica',
         'edicion_perfil_habilitada',
+        'nombre_sistema',
+        'whatsapp_notificaciones',
+        'ruta_logo_login',
+        'permisos_encargada',
+    ];
+
+    protected $casts = [
+        'permisos_encargada' => 'array',
     ];
 }

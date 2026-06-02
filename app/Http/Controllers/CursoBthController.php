@@ -11,6 +11,7 @@ class CursoBthController extends Controller
 {
     public function index()
     {
+        $this->checkPermission('cursos-bth.index');
         $cursos = CursoBth::with('carreraTecnica')->latest()->get();
         $carreras = CarreraTecnica::all();
         
@@ -22,6 +23,7 @@ class CursoBthController extends Controller
 
     public function store(Request $request)
     {
+        $this->checkPermission('cursos-bth.index');
         $request->validate([
             'carrera_tecnica_id' => 'required|exists:carreras_tecnicas,id',
             'nivel' => 'required|string|max:255'
@@ -32,8 +34,9 @@ class CursoBthController extends Controller
         return redirect()->back()->with('message', 'Curso BTH creado exitosamente.');
     }
 
-    public function update(Request $request, CursoBth $cursos_bth) // Laravel pluraliza a cursos_bths pero el parámetro suele ser el singular de la ruta
+    public function update(Request $request, CursoBth $cursos_bth)
     {
+        $this->checkPermission('cursos-bth.index');
         $request->validate([
             'carrera_tecnica_id' => 'required|exists:carreras_tecnicas,id',
             'nivel' => 'required|string|max:255'
@@ -46,6 +49,7 @@ class CursoBthController extends Controller
 
     public function destroy(CursoBth $cursos_bth)
     {
+        $this->checkPermission('cursos-bth.index');
         $cursos_bth->delete();
         return redirect()->back()->with('message', 'Curso BTH eliminado.');
     }

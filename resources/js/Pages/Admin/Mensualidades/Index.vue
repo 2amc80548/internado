@@ -9,23 +9,45 @@ const props = defineProps<{
     gestiones?: any[];
 }>();
 
-const mesesDisponibles = ['Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre'];
+const mesesDisponibles = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
 const formGenerar = useForm({
+    concepto_tipo: 'mes', // 'mes' o 'personalizado'
     mes: 'Febrero',
+    concepto_personalizado: '',
     monto: 150,
     registro_internado_ids: [] as number[]
 });
 
+const searchStudentInModal = ref('');
+
+const filteredEstudiantesActivos = computed(() => {
+    const list = props.estudiantesActivos || [];
+    if (!searchStudentInModal.value) return list;
+    const q = searchStudentInModal.value.toLowerCase();
+    return list.filter(est => 
+        est.estudiante?.persona?.nombre.toLowerCase().includes(q) ||
+        est.estudiante?.persona?.ap_paterno.toLowerCase().includes(q) ||
+        (est.estudiante?.persona?.ap_materno && est.estudiante.persona.ap_materno.toLowerCase().includes(q)) ||
+        est.estudiante?.persona?.ci.includes(q)
+    );
+});
+
 const seleccionarTodos = computed({
     get() {
-        return props.estudiantesActivos?.length > 0 && formGenerar.registro_internado_ids.length === props.estudiantesActivos.length;
+        const list = filteredEstudiantesActivos.value;
+        return list.length > 0 && list.every(e => formGenerar.registro_internado_ids.includes(e.id));
     },
     set(val) {
+        const listIds = filteredEstudiantesActivos.value.map(e => e.id);
         if (val) {
-            formGenerar.registro_internado_ids = props.estudiantesActivos?.map(e => e.id) || [];
+            listIds.forEach(id => {
+                if (!formGenerar.registro_internado_ids.includes(id)) {
+                    formGenerar.registro_internado_ids.push(id);
+                }
+            });
         } else {
-            formGenerar.registro_internado_ids = [];
+            formGenerar.registro_internado_ids = formGenerar.registro_internado_ids.filter(id => !listIds.includes(id));
         }
     }
 });
@@ -201,7 +223,8 @@ const submitGenerar = () => {
         preserveScroll: true,
         onSuccess: () => {
             showGenerarModal.value = false;
-            alert(`Mensualidades de ${formGenerar.mes} generadas exitosamente.`);
+            formGenerar.registro_internado_ids = [];
+            searchStudentInModal.value = '';
         }
     });
 };
@@ -487,17 +510,34 @@ const deleteMensualidad = (id: number) => {
                                     <h3 class="text-xl font-bold text-gray-900 mb-6">Generación Masiva de Deudas</h3>
                                     <p class="text-sm text-gray-500 mb-4">Seleccione a los estudiantes activos a los que desea generar la deuda.</p>
                                     
+                                    <div class="mb-4">
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">Tipo de Deuda</label>
+                                        <select v-model="formGenerar.concepto_tipo" class="w-full rounded-lg border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500 text-sm">
+                                            <option value="mes">Mensualidad Regular (Mes)</option>
+                                            <option value="personalizado">Concepto Personalizado (Otro)</option>
+                                        </select>
+                                    </div>
+
                                     <div class="grid grid-cols-2 gap-4 mb-4">
-                                        <div>
+                                        <div v-if="formGenerar.concepto_tipo === 'mes'">
                                             <label class="block text-sm font-medium text-gray-700 mb-1">Mes a Generar</label>
-                                            <select v-model="formGenerar.mes" class="w-full rounded-lg border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500">
+                                            <select v-model="formGenerar.mes" class="w-full rounded-lg border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500 text-sm">
                                                 <option v-for="mes in mesesDisponibles" :key="mes" :value="mes">{{ mes }}</option>
                                             </select>
                                         </div>
+                                        <div v-else>
+                                            <label class="block text-sm font-medium text-gray-700 mb-1">Concepto Específico</label>
+                                            <input type="text" v-model="formGenerar.concepto_personalizado" placeholder="ej. Aporte de Aseo, Material" class="w-full rounded-lg border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500 text-sm" required>
+                                        </div>
                                         <div>
                                             <label class="block text-sm font-medium text-gray-700 mb-1">Monto (Bs.)</label>
-                                            <input type="number" v-model="formGenerar.monto" min="0" class="w-full rounded-lg border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500">
+                                            <input type="number" v-model="formGenerar.monto" min="0" class="w-full rounded-lg border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500 text-sm">
                                         </div>
+                                    </div>
+
+                                    <div class="mb-2">
+                                        <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Asignar a Estudiantes Específicos:</label>
+                                        <input type="text" v-model="searchStudentInModal" placeholder="🔍 Buscar estudiante por Nombre o C.I..." class="w-full rounded-lg border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500 text-xs py-1.5 px-3 bg-slate-50 mb-3">
                                     </div>
 
                                     <div class="border rounded-lg max-h-60 overflow-y-auto">
@@ -511,21 +551,22 @@ const deleteMensualidad = (id: number) => {
                                                 </tr>
                                             </thead>
                                             <tbody class="bg-white divide-y divide-gray-200">
-                                                <tr v-for="est in estudiantesActivos" :key="est.id" class="hover:bg-gray-50">
+                                                <tr v-for="est in filteredEstudiantesActivos" :key="est.id" class="hover:bg-gray-50">
                                                     <td class="px-4 py-2">
                                                         <input type="checkbox" :value="est.id" v-model="formGenerar.registro_internado_ids" class="rounded border-gray-300 text-teal-600 focus:ring-teal-500">
                                                     </td>
                                                     <td class="px-4 py-2 text-sm text-gray-900">
-                                                        {{ est.estudiante?.persona?.nombre }} {{ est.estudiante?.persona?.ap_paterno }} (CI: {{ est.estudiante?.persona?.ci }})
+                                                        {{ est.estudiante?.persona?.nombre }} {{ est.estudiante?.persona?.ap_paterno }} <span class="text-xs text-gray-400 font-medium">(CI: {{ est.estudiante?.persona?.ci }})</span>
                                                     </td>
                                                 </tr>
-                                                <tr v-if="!estudiantesActivos || estudiantesActivos.length === 0">
-                                                    <td colspan="2" class="px-4 py-4 text-center text-sm text-gray-500">No hay estudiantes activos en esta gestión.</td>
+                                                <tr v-if="!filteredEstudiantesActivos || filteredEstudiantesActivos.length === 0">
+                                                    <td colspan="2" class="px-4 py-4 text-center text-sm text-gray-500">No se encontraron estudiantes coincidentes.</td>
                                                 </tr>
                                             </tbody>
                                         </table>
                                     </div>
-                                    <p class="text-xs text-red-600 mt-2" v-if="formGenerar.errors.registro_internado_ids">{{ formGenerar.errors.registro_internado_ids }}</p>
+                                    <p class="text-xs text-red-600 mt-2 font-medium" v-if="formGenerar.errors.mes">{{ formGenerar.errors.mes }}</p>
+                                    <p class="text-xs text-red-600 mt-2 font-medium" v-if="formGenerar.errors.registro_internado_ids">{{ formGenerar.errors.registro_internado_ids }}</p>
                                 </div>
                                 <div class="bg-gray-50 px-6 py-4 flex flex-row-reverse rounded-b-2xl">
                                     <button type="submit" :disabled="formGenerar.processing" class="w-full inline-flex justify-center rounded-lg shadow-sm px-4 py-2 bg-teal-600 text-base font-medium text-white hover:bg-teal-700 sm:ml-3 sm:w-auto sm:text-sm">

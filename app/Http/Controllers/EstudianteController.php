@@ -21,6 +21,8 @@ class EstudianteController extends Controller
 {
     public function index()
     {
+        $this->checkPermission('estudiantes.index');
+
         $estudiantes = Estudiante::with([
             'persona',
             'comunidad.provincia',
@@ -49,6 +51,7 @@ class EstudianteController extends Controller
 
     public function store(Request $request)
     {
+        $this->checkPermission('estudiantes.index');
         $request->validate([
             'ci' => 'required|string|unique:personas,ci',
             'nombre' => 'required|string',
@@ -132,6 +135,7 @@ class EstudianteController extends Controller
 
     public function update(Request $request, Estudiante $estudiante)
     {
+        $this->checkPermission('estudiantes.index');
         $request->validate([
             'nombre' => 'required|string',
             'ap_paterno' => 'required|string',
@@ -206,7 +210,10 @@ class EstudianteController extends Controller
                 if ($gestionActual) {
                     RegistroInternado::where('estudiante_id', $estudiante->id)
                         ->where('gestion_id', $gestionActual->id)
-                        ->update(['estado_anual' => 'Retirado']);
+                        ->update([
+                            'estado_anual' => 'Retirado',
+                            'motivo_retiro' => $request->motivo_retiro
+                        ]);
                 }
             }
 
@@ -223,7 +230,8 @@ class EstudianteController extends Controller
                         'curso_bth_id' => $request->curso_bth_id,
                         'pabellon' => $request->pabellon,
                         'cama' => $request->cama,
-                        'estado_anual' => $request->estado_global === 'Retirado' ? 'Retirado' : 'Cursando'
+                        'estado_anual' => $request->estado_global === 'Retirado' ? 'Retirado' : 'Cursando',
+                        'motivo_retiro' => $request->estado_global === 'Retirado' ? $request->motivo_retiro : null
                     ]);
                 }
             }
@@ -234,6 +242,7 @@ class EstudianteController extends Controller
 
     public function destroy(Request $request, Estudiante $estudiante)
     {
+        $this->checkPermission('estudiantes.index');
         $request->validate([
             'password' => 'required|string',
         ]);
@@ -262,6 +271,7 @@ class EstudianteController extends Controller
 
     public function subirFoto(Request $request, Estudiante $estudiante)
     {
+        $this->checkPermission('estudiantes.index');
         $request->validate([
             'foto' => 'required|image|mimes:jpeg,png,jpg,gif,webp|max:2048',
         ]);

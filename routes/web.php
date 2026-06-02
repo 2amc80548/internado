@@ -161,6 +161,7 @@ Route::middleware('auth')->group(function () {
     Route::resource('estudiantes', EstudianteController::class);
     Route::resource('mensualidades', MensualidadController::class)->parameters(['mensualidades' => 'mensualidad']);
     Route::resource('boletines', BoletinController::class)->parameters(['boletines' => 'boletin']);
+    Route::resource('incidencias', \App\Http\Controllers\IncidenciaController::class);
 
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');

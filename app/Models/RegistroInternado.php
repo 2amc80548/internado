@@ -16,7 +16,8 @@ class RegistroInternado extends Model
         'pabellon',
         'cama',
         'observacion',
-        'estado_anual'
+        'estado_anual',
+        'motivo_retiro'
     ];
 
     public function estudiante()

@@ -102,7 +102,7 @@ class GestionController extends Controller
             'origen_gestion_id' => 'required|exists:gestiones,id',
             'promociones' => 'required|array',
             'promociones.*.estudiante_id' => 'required|exists:estudiantes,id',
-            'promociones.*.estado_anual' => 'required|in:Aprobado,Reprobado,Retirado',
+            'promociones.*.estado_anual' => 'required|in:Aprobado,Reprobado,Retirado,Aprobado y Retirado,Reprobado y Retirado',
             'promociones.*.curso_id' => 'nullable|exists:cursos,id',
             'promociones.*.curso_bth_id' => 'nullable|exists:cursos_bth,id',
             'promociones.*.motivo_retiro' => 'nullable|string',
@@ -134,8 +134,14 @@ class GestionController extends Controller
                     ]);
                 }
 
-                // 2. Si el estado es Retirado, actualizar estado global, guardar motivo y suspender cuenta
-                if ($promo['estado_anual'] === 'Retirado') {
+                // 2. Si el estado es Retirado o contiene Retirado, actualizar estado global, guardar motivo y suspender cuenta
+                if (str_contains($promo['estado_anual'], 'Retirado')) {
+                    if ($registroActual) {
+                        $registroActual->update([
+                            'motivo_retiro' => $promo['motivo_retiro'] ?? 'Retirado en proceso de promoción de gestión.'
+                        ]);
+                    }
+
                     $estudiante->update([
                         'estado_global' => 'Retirado',
                         'motivo_retiro' => $promo['motivo_retiro'] ?? 'Retirado en proceso de promoción de gestión.'
