@@ -19,7 +19,9 @@ class Estudiante extends Model
         'año_egreso_bachiller',
         'año_egreso_bth',
         'ruta_foto',
-        'edicion_habilitada_hasta'
+        'edicion_habilitada_hasta',
+        'motivo_retiro',
+        'motivo_anulacion'
     ];
 
     public function persona()

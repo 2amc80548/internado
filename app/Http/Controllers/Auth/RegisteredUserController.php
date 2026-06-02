@@ -4,10 +4,11 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Models\Persona;
+use App\Models\Rol;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rules;
 use Illuminate\Validation\ValidationException;
@@ -32,50 +33,41 @@ class RegisteredUserController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $request->validate([
-            'ci' => 'required|string|unique:personas,ci',
-            'nombre' => 'required|string|max:255',
-            'ap_paterno' => 'required|string|max:255',
-            'ap_materno' => 'nullable|string|max:255',
-            'celular' => 'nullable|string|max:20',
-            'email' => 'required|string|lowercase|email|max:255|unique:'.User::class,
+            'ci' => 'required|string',
+            'email' => 'nullable|string|lowercase|email|max:255|unique:'.User::class,
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
-            'foto' => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
         ]);
 
-        \Illuminate\Support\Facades\DB::transaction(function () use ($request) {
-            $persona = \App\Models\Persona::create([
-                'ci' => $request->ci,
-                'nombre' => $request->nombre,
-                'ap_paterno' => $request->ap_paterno,
-                'ap_materno' => $request->ap_materno,
-                'celular' => $request->celular,
-                'estado' => true
+        // 1. Buscar si la persona existe y está registrada como estudiante
+        $persona = Persona::where('ci', $request->ci)->first();
+        if (!$persona || !$persona->estudiante) {
+            throw ValidationException::withMessages([
+                'ci' => 'El número de carnet no está registrado como estudiante en el internado. Por favor, comuníquese con la administración para su registro.',
             ]);
+        }
 
-            $rol = \App\Models\Rol::where('nombre', 'Estudiante')->first();
-
-            $user = User::create([
-                'name' => $request->nombre . ' ' . $request->ap_paterno,
-                'email' => $request->email,
-                'password' => Hash::make($request->password),
-                'persona_ci' => $persona->ci,
-                'rol_id' => $rol ? $rol->id : null,
-                'estado_cuenta' => 'Pendiente'
+        // 2. Verificar si ya existe una cuenta de usuario para este estudiante
+        $userExists = User::where('persona_ci', $persona->ci)->exists();
+        if ($userExists) {
+            throw ValidationException::withMessages([
+                'ci' => 'Este número de carnet ya tiene una cuenta registrada en el sistema.',
             ]);
+        }
 
-            $path = null;
-            if ($request->hasFile('foto')) {
-                $path = $request->file('foto')->store('fotos_perfil', 'public');
-            }
+        $rol = Rol::where('nombre', 'Estudiante')->first();
 
-            \App\Models\Estudiante::create([
-                'persona_ci' => $persona->ci,
-                'ruta_foto' => $path,
-            ]);
+        // 3. Crear el usuario enlazado a la persona existente
+        $user = User::create([
+            'name' => $persona->nombre . ' ' . $persona->ap_paterno,
+            'email' => $request->email,
+            'password' => Hash::make($request->password),
+            'persona_ci' => $persona->ci,
+            'rol_id' => $rol ? $rol->id : null,
+            'estado_cuenta' => 'Pendiente'
+        ]);
 
-            event(new Registered($user));
-        });
+        event(new Registered($user));
 
-        return redirect()->route('login')->with('status', 'Solicitud enviada correctamente. Por favor, espere a que el administrador apruebe su cuenta.');
+        return redirect()->route('login')->with('status', 'Solicitud de cuenta enviada correctamente. Por favor, espere a que el administrador apruebe su cuenta.');
     }
 }

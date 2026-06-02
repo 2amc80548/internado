@@ -155,6 +155,7 @@ Route::middleware('auth')->group(function () {
 
     Route::post('/estudiantes/{estudiante}/foto', [\App\Http\Controllers\EstudianteController::class, 'subirFoto'])->name('estudiantes.foto');
 
+    Route::post('/gestiones/ofertar', [GestionController::class, 'ofertar'])->name('gestiones.ofertar');
     Route::post('/gestiones/promocionar', [GestionController::class, 'promocionar'])->name('gestiones.promocionar');
     Route::resource('gestiones', GestionController::class)->parameters(['gestiones' => 'gestion']);
     Route::resource('estudiantes', EstudianteController::class);
